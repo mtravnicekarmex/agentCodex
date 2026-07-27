@@ -131,3 +131,10 @@ Perzistence a obnovení vláken jsou připravené jako další etapa; první ver
 ```bash
 pytest
 ```
+
+
+## Pracovní adresář agenta
+
+`vytvor_vlakno()` přijímá volitelný parametr `cwd`. Při vynechání používá
+kořen tohoto repozitáře. `vytvor_agenta()` vždy předává svůj `project_root`,
+takže profil agenta i provider pracují nad stejným projektem.

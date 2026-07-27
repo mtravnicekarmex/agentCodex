@@ -256,10 +256,12 @@ class CodexVlakno:
         approval_mode: ApprovalMode,
         sandbox: Sandbox,
         instructions: str | None = None,
+        cwd: Path | str = WORKSPACE,
     ) -> None:
         self.model = model
         self.reasoning = reasoning
         self.permission_profile = permission_profile
+        self.cwd = Path(cwd).resolve()
         self._lock = threading.Lock()
         self._zavreno = False
         self._codex = Codex()
@@ -267,7 +269,7 @@ class CodexVlakno:
             prihlaseni(self._codex)
             kwargs = {
                 "approval_mode": approval_mode,
-                "cwd": str(WORKSPACE),
+                "cwd": str(self.cwd),
                 "model": model,
                 "config": {"model_reasoning_effort": reasoning},
                 "sandbox": sandbox,
@@ -285,7 +287,7 @@ class CodexVlakno:
         print(f"  Reasoning: {reasoning}")
         print(f"  Práva:     {permission_profile}")
         print(f"  Sandbox:   {sandbox.value}")
-        print(f"  Projekt:   {WORKSPACE}\n")
+        print(f"  Projekt:   {self.cwd}\n")
 
     def poloz_dotaz(self, text: str) -> str:
         if self._zavreno:
@@ -321,10 +323,12 @@ class ClaudeVlakno:
         reasoning: Reasoning = "medium",
         permission_mode: str = "dontAsk",
         instructions: str | None = None,
+        cwd: Path | str = WORKSPACE,
     ) -> None:
         self.model = model
         self.reasoning = reasoning
         self.permission_profile = permission_profile
+        self.cwd = Path(cwd).resolve()
         self._lock = threading.Lock()
         self._zavreno = False
         prihlaseni_claude()
@@ -342,7 +346,7 @@ class ClaudeVlakno:
         loop_bezi.wait()
 
         options_kwargs = {
-            "cwd": str(WORKSPACE),
+            "cwd": str(self.cwd),
             "model": model,
             "effort": reasoning,
             "tools": tools,
@@ -365,7 +369,7 @@ class ClaudeVlakno:
         print(f"  Effort:  {reasoning}")
         print(f"  Práva:   {permission_profile}")
         print(f"  Tools:   {', '.join(tools)}")
-        print(f"  Projekt: {WORKSPACE}\n")
+        print(f"  Projekt: {self.cwd}\n")
 
     def _spusti(self, coro):
         return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
@@ -411,14 +415,20 @@ def vytvor_vlakno(
     *,
     config: AgentConfig | None = None,
     instructions: str | None = None,
+    cwd: Path | str | None = None,
 ) -> CodexVlakno | ClaudeVlakno:
     """Založí obecné dlouho žijící vlákno.
 
     ``instructions`` je volitelný hotový text instrukcí. Funkce neřeší,
     odkud pochází; profilovou logiku zajišťuje vyšší vrstva ``vytvor_agenta``.
+
+    ``cwd`` určuje pracovní adresář provideru. Při vynechání se zachová
+    původní chování a použije se ``WORKSPACE``.
     """
     if config is None:
         config = AgentConfig.nacti()
+
+    working_directory = Path(cwd).resolve() if cwd is not None else WORKSPACE
 
     provider = _over_provider(provider)
     model = _over_model(model)
@@ -436,6 +446,7 @@ def vytvor_vlakno(
             approval_mode=approval_mode,
             sandbox=sandbox,
             instructions=instructions,
+            cwd=working_directory,
         )
 
     tools, allowed_tools, permission_mode = _claude_opravneni(permission_profile)
@@ -447,6 +458,7 @@ def vytvor_vlakno(
         reasoning=reasoning,
         permission_mode=permission_mode,
         instructions=instructions,
+        cwd=working_directory,
     )
 
 

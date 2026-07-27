@@ -6,7 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from agent import AgentConfig, AgentVlakno, Provider, Reasoning, WORKSPACE, vytvor_vlakno
+from agent import (
+    PERMISSION_PROFILES,
+    AgentConfig,
+    AgentVlakno,
+    PermissionProfile,
+    Provider,
+    Reasoning,
+    WORKSPACE,
+    vytvor_vlakno,
+)
 
 
 ProfileLevel = Literal["low", "mid", "high"]
@@ -19,7 +28,7 @@ class AgentProfileConfig:
     provider: Provider
     model_profile: ProfileLevel
     reasoning_profile: ProfileLevel
-    permission_profile: str
+    permission_profile: PermissionProfile
     persistent_thread: bool = False
     load_private_memory: bool = True
     load_working_state: bool = True
@@ -76,6 +85,15 @@ class AgentProfile:
         if provider not in ("codex", "claude"):
             raise ValueError(f"Neznámý provider profilu: {provider!r}")
 
+
+        permission_profile = data["permission_profile"]
+        if permission_profile not in PERMISSION_PROFILES:
+            allowed = ", ".join(PERMISSION_PROFILES)
+            raise ValueError(
+                f"Neplatný permission_profile: {permission_profile!r}. "
+                f"Povolené hodnoty: {allowed}."
+            )
+
         model_profile = self._validate_level(data["model_profile"], "model_profile")
         reasoning_profile = self._validate_level(
             data["reasoning_profile"], "reasoning_profile"
@@ -87,7 +105,7 @@ class AgentProfile:
             provider=provider,
             model_profile=model_profile,
             reasoning_profile=reasoning_profile,
-            permission_profile=data["permission_profile"],
+            permission_profile=permission_profile,  # type: ignore[arg-type]
             persistent_thread=bool(data.get("persistent_thread", False)),
             load_private_memory=bool(data.get("load_private_memory", True)),
             load_working_state=bool(data.get("load_working_state", True)),
@@ -296,5 +314,6 @@ def vytvor_agenta(
         permission_profile=profile.config.permission_profile,
         config=config,
         instructions=instructions,
+        cwd=profile.project_root,
     )
     return Agent(profile=profile, thread=thread)
