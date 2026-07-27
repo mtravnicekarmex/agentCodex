@@ -4,7 +4,7 @@
   "provider": "codex",
   "model_profile": "high",
   "reasoning_profile": "high",
-  "permission_profile": "review",
+  "permission_profile": "edit",
   "persistent_thread": false,
   "load_private_memory": true,
   "load_working_state": true,
