@@ -2,7 +2,7 @@
   "name": "programmer",
   "display_name": "Implementation Programmer",
   "provider": "codex",
-  "model_profile": "mid",
+  "model_profile": "high",
   "reasoning_profile": "high",
   "permission_profile": "edit",
   "persistent_thread": false,
