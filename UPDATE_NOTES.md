@@ -1,24 +1,29 @@
-# Aktualizace pracovního adresáře agentů
+# Aktualizace: kontraktový workflow
 
-Balíček nahrazuje tyto soubory:
+Balíček přidává:
 
-- `agent.py`
-- `agent_profile.py`
-- `tests/test_agent_profile.py`
-- `README.md`
+- `contract_workflow.py` — model, ukládání, předávání a review kontraktů,
+- `agent_console.py` — dlouho běžící konzoli pro architecta a programátora,
+- základní profil `programmer`,
+- kontraktové příkazy architecta,
+- inboxy agentů a ownera,
+- řízené zápisy do paměti,
+- testy workflow.
 
-Změny:
+## Instalace
 
-- `vytvor_vlakno()` podporuje volitelný parametr `cwd`,
-- Codex i Claude používají předaný pracovní adresář,
-- `vytvor_agenta()` předává `project_root` do technického vlákna,
-- `permission_profile` se validuje už při načítání profilu,
-- přidány testy pro předání `cwd` a neplatné oprávnění.
+Překopírujte obsah složky `agentCodex` do kořene repozitáře.
 
-Po překopírování spusťte:
+Balíček záměrně nepřepisuje:
+
+- `agents/architect/MEMORY.md`,
+- `agents/architect/WORKING_STATE.md`,
+- existující soubory v `memory/`.
+
+## Kontrola
 
 ```powershell
-python -m compileall agent.py agent_profile.py
+python -m compileall contract_workflow.py agent_console.py
 python -m pytest -v
-python example_architect.py
+python agent_console.py
 ```

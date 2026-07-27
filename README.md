@@ -1,6 +1,6 @@
 # agentCodex
 
-Tenká vrstva nad [Codex SDK](https://github.com/openai/codex) a [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Oba providery zpřístupňuje přes stejné synchronní rozhraní.
+Tenká vrstva nad Codex SDK a Claude Agent SDK se společným synchronním rozhraním.
 
 Projekt má dvě úrovně API:
 
@@ -9,42 +9,17 @@ Projekt má dvě úrovně API:
 
 ## Instalace
 
-```bash
+```powershell
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Zkopírujte `.env.example` do `.env` a upravte modely podle účtů, které používáte.
-
 ## Přihlášení
 
-```bash
+```powershell
 python agent.py
 ```
-
-Přihlášení je jediný povolený interaktivní krok.
-
-## Nízkoúrovňové vlákno
-
-Stávající API zůstává funkční:
-
-```python
-from agent import AgentConfig, PERMISSION_REVIEW, vytvor_vlakno
-
-config = AgentConfig.nacti()
-
-with vytvor_vlakno(
-    config.PROVIDER_CODEX,
-    config.MODEL_CODEX_LOW,
-    config.REASONING_LOW,
-    PERMISSION_REVIEW,
-    config=config,
-) as vlakno:
-    print(vlakno.poloz_dotaz("Udělej revizi souboru agent.py."))
-```
-
-`vytvor_vlakno()` nově přijímá volitelný keyword argument `instructions`. Běžný kód jej nemusí používat; slouží vyšší agentní vrstvě.
 
 ## Profilovaný agent
 
@@ -55,86 +30,79 @@ from agent_profile import vytvor_agenta
 config = AgentConfig.nacti()
 
 with vytvor_agenta("architect", config=config) as architect:
-    print(
-        architect.poloz_dotaz(
-            "Posuď současné rozdělení nízké a vysoké agentní vrstvy."
-        )
-    )
+    print(architect.poloz_dotaz("Posuď návrh nové vrstvy."))
 ```
 
-Předdefinovaný příkaz:
+## Interaktivní workflow architect → programmer → architect
 
-```python
-with vytvor_agenta("architect", config=config) as architect:
-    print(
-        architect.spust_prikaz(
-            "propose_change",
-            task="Navrhni perzistenci vláken pro oba providery.",
-        )
-    )
+Spusťte:
+
+```powershell
+python agent_console.py
 ```
 
-## Struktura profilu agenta
+Nejdůležitější příkazy:
 
 ```text
-agents/<name>/
-├── config.json
-├── ROLE.md
-├── MEMORY.md
-├── WORKING_STATE.md
-├── COMMANDS.md
-├── commands/
-└── runtime/
+/new <téma>   architect vytvoří CONTRACT - NNNN.md
+/work         programmer převezme a implementuje nejbližší kontrakt
+/review       architect provede review každého bodu
+/status       zobrazí frontu a předání
+/inbox <agent>
 ```
 
-- `config.json` vybírá provider, modelový profil, reasoning a oprávnění.
-- `ROLE.md` obsahuje stabilní instrukce role.
-- `MEMORY.md` je soukromá dlouhodobá paměť.
-- `WORKING_STATE.md` obsahuje aktuální rozpracovaný kontext.
-- `commands/*.md` jsou opakovaně použitelné šablony příkazů.
-- `runtime/` je rezervováno pro budoucí perzistenci vláken a není verzováno.
+### Životní cyklus
 
-Všichni agenti pracují nad stejným kořenem projektu. Jejich podsložka je profil, nikoli omezený pracovní adresář.
-
-## Modelové profily
-
-Agent používá v `config.json` hodnoty `low`, `mid`, `high`. Konkrétní model se vybere z `.env` podle provideru:
-
-```json
-{
-  "provider": "codex",
-  "model_profile": "high",
-  "reasoning_profile": "high"
-}
+```text
+architect
+  READY_FOR_PROGRAMMER
+      ↓
+programmer
+  IN_PROGRESS
+  READY_FOR_ARCHITECT_REVIEW
+      ↓
+architect
+  APPROVED → owner
+  CHANGES_REQUESTED → programmer
 ```
 
-Tím lze později změnit konkrétní model v `.env` bez úprav všech agentních profilů.
+Každý kontrakt obsahuje:
+
+- zadání a akceptační kritéria každého bodu,
+- poznámku programátora ke každému bodu,
+- dotčené soubory a testy,
+- review architekta ke každému bodu,
+- souhrn obou agentů,
+- aktuální stav a adresáta předání.
+
+Oznámení se zapisují do `agents/<agent>/INBOX.md`. Po schválení je zpráva
+zapsána do `contracts/OWNER_INBOX.md`.
+
+Architect může v review navrhnout řízené zápisy do:
+
+```text
+memory/*.md
+agents/<agent>/MEMORY.md
+agents/<agent>/WORKING_STATE.md
+```
+
+Hostitelský kód jiné cíle odmítne.
 
 ## Oprávnění
 
-| Profil | Codex | Claude |
-| --- | --- | --- |
-| `review` | `ApprovalMode.deny_all`, `Sandbox.read_only` | `Read`, `Grep`, `Glob` |
-| `edit` | `ApprovalMode.deny_all`, `Sandbox.workspace_write` | `Read`, `Grep`, `Glob`, `Edit`, `Write` |
-| `full` | `ApprovalMode.deny_all`, `Sandbox.full_access` | navíc `Bash` |
+| Profil | Účel |
+| --- | --- |
+| `review` | čtení a analýza bez změny kódu |
+| `edit` | úpravy souborů v pracovním projektu |
+| `full` | plný přístup včetně shellu; používat výjimečně |
 
-## Paměť
+Výchozí workflow používá:
 
-- krátkodobá paměť: aktivní konverzační vlákno,
-- soukromá dlouhodobá paměť: `agents/<name>/MEMORY.md`,
-- společná dlouhodobá paměť: `memory/*.md`.
-
-Perzistence a obnovení vláken jsou připravené jako další etapa; první verze při každém `vytvor_agenta()` založí nové technické vlákno.
+- architect: `review`,
+- programmer: `edit`.
 
 ## Testy
 
-```bash
-pytest
+```powershell
+python -m pytest -v
 ```
-
-
-## Pracovní adresář agenta
-
-`vytvor_vlakno()` přijímá volitelný parametr `cwd`. Při vynechání používá
-kořen tohoto repozitáře. `vytvor_agenta()` vždy předává svůj `project_root`,
-takže profil agenta i provider pracují nad stejným projektem.
