@@ -45,9 +45,7 @@ def _env(klic: str) -> str:
 
 @dataclass(frozen=True)
 class AgentConfig:
-    """
-    Konfigurace nactena z .env. Import modulu sam o sobe .env nenacita.
-    """
+    """Konfigurace načtená z .env. Import modulu sám o sobě .env nenačítá."""
 
     PROVIDER_CODEX: str
     PROVIDER_CLAUDE: str
@@ -91,6 +89,7 @@ class AgentConfig:
             return (self.MODEL_CODEX_LOW, self.MODEL_CODEX_MID, self.MODEL_CODEX_HIGH)
         return (self.MODEL_CLAUDE_LOW, self.MODEL_CLAUDE_MID, self.MODEL_CLAUDE_HIGH)
 
+
 CLAUDE_BIN = (
     Path(claude_agent_sdk.__file__).parent
     / "_bundled"
@@ -99,44 +98,31 @@ CLAUDE_BIN = (
 
 
 class AgentVlakno(Protocol):
-    """
-    Spolecne sync rozhrani pro dlouho zijici konverzacni vlakno.
-    """
+    """Společné synchronní rozhraní pro dlouho žijící konverzační vlákno."""
 
     nazev: str
     model: str
     reasoning: Reasoning
     permission_profile: PermissionProfile
 
-    def poloz_dotaz(self, text: str) -> str:
-        ...
+    def poloz_dotaz(self, text: str) -> str: ...
 
-    def zavri(self) -> None:
-        ...
+    def zavri(self) -> None: ...
 
 
 def _over_provider(provider: str) -> Provider:
-    """
-    Overi poskytovatele z verejneho API.
-    """
     if provider not in PROVIDERS:
         raise ValueError(f"Neznámý poskytovatel: {provider!r}")
-    return provider
+    return provider  # type: ignore[return-value]
 
 
 def _over_reasoning(reasoning: str) -> Reasoning:
-    """
-    Overi obecnou reasoning uroven z verejneho API.
-    """
     if reasoning not in ALL_REASONING:
         raise ValueError(f"Neznámá reasoning úroveň: {reasoning!r}")
-    return reasoning
+    return reasoning  # type: ignore[return-value]
 
 
 def _over_reasoning_pro_provider(provider: Provider, reasoning: Reasoning) -> None:
-    """
-    Overi, ze reasoning uroven podporuje konkretni provider.
-    """
     povolene = CODEX_REASONING if provider == "codex" else CLAUDE_REASONING
     if reasoning not in povolene:
         hodnoty = ", ".join(povolene)
@@ -147,22 +133,16 @@ def _over_reasoning_pro_provider(provider: Provider, reasoning: Reasoning) -> No
 
 
 def _over_permission_profile(permission_profile: str) -> PermissionProfile:
-    """
-    Overi jednotny profil opravneni pro Codex i Claude vlakna.
-    """
     if permission_profile not in PERMISSION_PROFILES:
         hodnoty = ", ".join(PERMISSION_PROFILES)
         raise ValueError(
             f"Neznámý profil oprávnění: {permission_profile!r}. "
             f"Povolené hodnoty: {hodnoty}."
         )
-    return permission_profile
+    return permission_profile  # type: ignore[return-value]
 
 
 def _codex_opravneni(permission_profile: PermissionProfile) -> tuple[ApprovalMode, Sandbox]:
-    """
-    Prevede jednotny profil opravneni na Codex approval/sandbox nastaveni.
-    """
     if permission_profile == "review":
         return ApprovalMode.deny_all, Sandbox.read_only
     if permission_profile == "edit":
@@ -171,32 +151,22 @@ def _codex_opravneni(permission_profile: PermissionProfile) -> tuple[ApprovalMod
 
 
 def _claude_opravneni(permission_profile: PermissionProfile) -> tuple[list[str], list[str], str]:
-    """
-    Prevede jednotny profil opravneni na Claude tools/allowed_tools/permission_mode.
-    """
     if permission_profile == "review":
         tools = CLAUDE_REVIEW_TOOLS
     elif permission_profile == "edit":
         tools = CLAUDE_EDIT_TOOLS
     else:
         tools = CLAUDE_FULL_TOOLS
-
     return list(tools), list(tools), "dontAsk"
 
 
 def _over_model(model: str | None) -> str:
-    """
-    Overi, ze volajici predal model nacteny z .env.
-    """
     if model:
         return model.strip()
     raise RuntimeError("Model není zadaný. Použijte některou z MODEL_* hodnot z .env.")
 
 
 def _over_model_pro_provider(provider: Provider, model: str, config: AgentConfig) -> None:
-    """
-    Overi, ze model patri ke zvolenemu provideru podle .env konfigurace.
-    """
     povolene = tuple(dict.fromkeys(config.modely_pro(provider)))
     if model not in povolene:
         hodnoty = ", ".join(povolene)
@@ -207,27 +177,14 @@ def _over_model_pro_provider(provider: Provider, model: str, config: AgentConfig
 
 
 def prihlaseni(codex: Codex) -> None:
-    """
-    Zajistí přihlášení přes účet ChatGPT, pokud ještě chybí.
-
-    SDK umí znovu použít existující Codex autentizaci automaticky,
-    takže interaktivní login spustíme jen při prvním použití nebo po odhlášení.
-    """
     account = codex.account(refresh_token=True)
-
-    if account.account is not None:
-        return
-
-    if not account.requires_openai_auth:
+    if account.account is not None or not account.requires_openai_auth:
         return
 
     login = codex.login_chatgpt()
-
     print("Otevřete tuto adresu v prohlížeči:")
     print(login.auth_url)
-
     result = login.wait()
-
     if not result.success:
         raise RuntimeError(
             f"Přihlášení přes ChatGPT se nezdařilo: {result.error or 'neznámá chyba'}."
@@ -236,14 +193,10 @@ def prihlaseni(codex: Codex) -> None:
     account = codex.account(refresh_token=True)
     if account.account is None:
         raise RuntimeError("Přihlášení doběhlo, ale aktivní účet stále není k dispozici.")
-
     print("Přihlášení bylo úspěšné.")
 
 
 def _spusti_claude_cli(*args: str, capture_output: bool = False) -> subprocess.CompletedProcess:
-    """
-    Spusti pribalene `claude` CLI a chybu chybejici binarky prevede na srozumitelnou hlasku.
-    """
     try:
         return subprocess.run(
             [str(CLAUDE_BIN), *args],
@@ -258,14 +211,7 @@ def _spusti_claude_cli(*args: str, capture_output: bool = False) -> subprocess.C
 
 
 def prihlaseni_claude() -> None:
-    """
-    Zajistí přihlášení do Anthropic účtu (Claude Pro/Max), pokud ještě chybí.
-
-    Claude Agent SDK na rozdíl od Codex SDK nemá vlastní přihlašovací API,
-    proto se stav ověřuje a přihlášení spouští přímo přes přibalené `claude` CLI.
-    """
     status = _spusti_claude_cli("auth", "status", "--json", capture_output=True)
-
     if status.returncode != 0:
         detail = (status.stderr or status.stdout or "").strip()
         if detail:
@@ -276,48 +222,30 @@ def prihlaseni_claude() -> None:
         info = json.loads(status.stdout or "{}")
     except json.JSONDecodeError:
         info = {}
-
     if info.get("loggedIn"):
         return
 
     print("Otevřete prohlížeč a přihlaste se do Anthropic účtu...")
     result = _spusti_claude_cli("auth", "login", "--claudeai")
-
     if result.returncode != 0:
         raise RuntimeError("Přihlášení do Anthropic účtu se nezdařilo.")
-
     print("Přihlášení bylo úspěšné.")
 
 
 def inicializuj_prihlaseni(provider: Provider | None = None) -> None:
-    """
-    Provede jediny povoleny interaktivni krok aplikace: prihlaseni provideru.
-
-    Po uspesnem prihlaseni uz vytvareni vlaken a posilani dotazu nevyzaduje
-    zadny vstup z terminalu. Kdyz provider neni zadan, overi se Codex i Claude.
-    """
     if provider is not None:
         provider = _over_provider(provider)
-
     if provider is None or provider == "codex":
         codex = Codex()
         try:
             prihlaseni(codex)
         finally:
             codex.close()
-
     if provider is None or provider == "claude":
         prihlaseni_claude()
 
 
 class CodexVlakno:
-    """
-    Codex vlákno vybraného modelu a reasoning úrovně.
-
-    Nabízí stejné rozhraní (`polož_dotaz`/`zavri`) jako `ClaudeVlakno`, takže
-    volající kód nemusí řešit, s jakým poskytovatelem zrovna mluví.
-    """
-
     nazev = "Codex"
 
     def __init__(
@@ -327,6 +255,7 @@ class CodexVlakno:
         permission_profile: PermissionProfile,
         approval_mode: ApprovalMode,
         sandbox: Sandbox,
+        instructions: str | None = None,
     ) -> None:
         self.model = model
         self.reasoning = reasoning
@@ -336,14 +265,16 @@ class CodexVlakno:
         self._codex = Codex()
         try:
             prihlaseni(self._codex)
-
-            self._thread = self._codex.thread_start(
-                approval_mode=approval_mode,
-                cwd=str(WORKSPACE),
-                model=model,
-                config={"model_reasoning_effort": reasoning},
-                sandbox=sandbox,
-            )
+            kwargs = {
+                "approval_mode": approval_mode,
+                "cwd": str(WORKSPACE),
+                "model": model,
+                "config": {"model_reasoning_effort": reasoning},
+                "sandbox": sandbox,
+            }
+            if instructions:
+                kwargs["developer_instructions"] = instructions
+            self._thread = self._codex.thread_start(**kwargs)
         except Exception:
             self._codex.close()
             raise
@@ -359,7 +290,6 @@ class CodexVlakno:
     def poloz_dotaz(self, text: str) -> str:
         if self._zavreno:
             raise RuntimeError("Codex vlákno je zavřené.")
-
         with self._lock:
             result = self._thread.run(text)
         return result.final_response or ""
@@ -380,14 +310,6 @@ class CodexVlakno:
 
 
 class ClaudeVlakno:
-    """
-    Claude vlákno vybraného modelu se sync rozhraním nad async ClaudeSDKClient.
-
-    ClaudeSDKClient je čistě asynchronní a musí zůstat připojený mezi
-    jednotlivými dotazy (drží konverzační kontext), proto si tato třída
-    běží vlastní event loop na pozadí a async volání do něj jen posílá.
-    """
-
     nazev = "Claude"
 
     def __init__(
@@ -398,6 +320,7 @@ class ClaudeVlakno:
         allowed_tools: list[str],
         reasoning: Reasoning = "medium",
         permission_mode: str = "dontAsk",
+        instructions: str | None = None,
     ) -> None:
         self.model = model
         self.reasoning = reasoning
@@ -418,14 +341,17 @@ class ClaudeVlakno:
         self._vlakno.start()
         loop_bezi.wait()
 
-        options = ClaudeAgentOptions(
-            cwd=str(WORKSPACE),
-            model=model,
-            effort=reasoning,
-            tools=tools,
-            allowed_tools=allowed_tools,
-            permission_mode=permission_mode,
-        )
+        options_kwargs = {
+            "cwd": str(WORKSPACE),
+            "model": model,
+            "effort": reasoning,
+            "tools": tools,
+            "allowed_tools": allowed_tools,
+            "permission_mode": permission_mode,
+        }
+        if instructions:
+            options_kwargs["system_prompt"] = instructions
+        options = ClaudeAgentOptions(**options_kwargs)
         self._client = ClaudeSDKClient(options)
         try:
             self._spusti(self._client.connect())
@@ -447,7 +373,6 @@ class ClaudeVlakno:
     def poloz_dotaz(self, text: str) -> str:
         if self._zavreno:
             raise RuntimeError("Claude vlákno je zavřené.")
-
         with self._lock:
             return self._spusti(self._poloz_dotaz_async(text))
 
@@ -455,14 +380,12 @@ class ClaudeVlakno:
 
     async def _poloz_dotaz_async(self, text: str) -> str:
         await self._client.query(text)
-
         casti: list[str] = []
         async for message in self._client.receive_response():
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         casti.append(block.text)
-
         return "\n".join(casti)
 
     def zavri(self) -> None:
@@ -487,36 +410,12 @@ def vytvor_vlakno(
     permission_profile: str,
     *,
     config: AgentConfig | None = None,
+    instructions: str | None = None,
 ) -> CodexVlakno | ClaudeVlakno:
-    """
-    Zalozi dlouho zijici vlakno pro volani z kodu.
+    """Založí obecné dlouho žijící vlákno.
 
-    Args:
-        provider:
-            Hodnota z PROVIDER_CODEX nebo PROVIDER_CLAUDE.
-
-        model:
-            Hodnota z MODEL_CODEX_LOW, MODEL_CODEX_MID, MODEL_CODEX_HIGH,
-            MODEL_CLAUDE_LOW, MODEL_CLAUDE_MID nebo MODEL_CLAUDE_HIGH.
-
-        reasoning:
-            Hodnota z REASONING_LOW, REASONING_MID nebo REASONING_HIGH.
-            Claude SDK stejnou hodnotu pouzije jako effort.
-
-        permission_profile:
-            Jednotny profil opravneni: "review", "edit" nebo "full".
-
-    Vrácený objekt lze používat i jako context manager:
-
-        config = AgentConfig.nacti()
-        with vytvor_vlakno(
-            config.PROVIDER_CODEX,
-            config.MODEL_CODEX_LOW,
-            config.REASONING_LOW,
-            PERMISSION_REVIEW,
-            config=config,
-        ) as vlakno:
-            print(vlakno.poloz_dotaz("Over tenhle diff."))
+    ``instructions`` je volitelný hotový text instrukcí. Funkce neřeší,
+    odkud pochází; profilovou logiku zajišťuje vyšší vrstva ``vytvor_agenta``.
     """
     if config is None:
         config = AgentConfig.nacti()
@@ -536,6 +435,7 @@ def vytvor_vlakno(
             permission_profile=permission_profile,
             approval_mode=approval_mode,
             sandbox=sandbox,
+            instructions=instructions,
         )
 
     tools, allowed_tools, permission_mode = _claude_opravneni(permission_profile)
@@ -546,6 +446,7 @@ def vytvor_vlakno(
         allowed_tools=allowed_tools,
         reasoning=reasoning,
         permission_mode=permission_mode,
+        instructions=instructions,
     )
 
 

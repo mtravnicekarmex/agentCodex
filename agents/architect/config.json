@@ -1,0 +1,12 @@
+{
+  "name": "architect",
+  "display_name": "System Architect",
+  "provider": "codex",
+  "model_profile": "high",
+  "reasoning_profile": "high",
+  "permission_profile": "review",
+  "persistent_thread": false,
+  "load_private_memory": true,
+  "load_working_state": true,
+  "load_shared_memory": true
+}

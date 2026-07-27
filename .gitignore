@@ -1,3 +1,7 @@
 .env
 __pycache__/
 .venv
+.pytest_cache/
+agents/*/runtime/*
+!agents/*/runtime/.gitkeep
+agents/*/logs/
