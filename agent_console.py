@@ -20,6 +20,8 @@ Příkazy:
   /exit             Ukončí konzoli.
 """.strip()
 
+INBOX_AGENTS = ("architect", "programmer", "owner")
+
 
 def main(project_root: Path = WORKSPACE) -> None:
     project_root = project_root.resolve()
@@ -57,7 +59,11 @@ def main(project_root: Path = WORKSPACE) -> None:
                 print_status(store)
                 continue
             if raw.startswith("/inbox "):
-                show_inbox(project_root, raw.split(maxsplit=1)[1])
+                name = raw.split(maxsplit=1)[1].strip()
+                if name not in INBOX_AGENTS:
+                    print("Neznámý agent. Použijte architect, programmer nebo owner.")
+                    continue
+                show_inbox(project_root, name)
                 continue
             if raw.startswith("/chat "):
                 name = raw.split(maxsplit=1)[1].strip()
@@ -68,13 +74,22 @@ def main(project_root: Path = WORKSPACE) -> None:
                 print(f"Aktivní chat: {name}")
                 continue
             if raw.startswith("/new "):
-                create_contract(architect, store, raw.split(maxsplit=1)[1])
+                try:
+                    create_contract(architect, store, raw.split(maxsplit=1)[1])
+                except Exception as error:
+                    print(f"\nChyba při vytváření kontraktu: {error}")
                 continue
             if raw == "/work":
-                implement_next(programmer, store)
+                try:
+                    implement_next(programmer, store)
+                except Exception as error:
+                    print(f"\nChyba při implementaci kontraktu: {error}")
                 continue
             if raw == "/review":
-                review_next(architect, store)
+                try:
+                    review_next(architect, store)
+                except Exception as error:
+                    print(f"\nChyba při review kontraktu: {error}")
                 continue
 
             try:
