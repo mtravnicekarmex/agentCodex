@@ -498,3 +498,39 @@ programmer's work — a concrete implementation of `PRINCIPLES.md` P3
   message at the right point, using a fake in place of `git_ops` (no real
   repository needed for the console-level tests). Verified with
   `py_compile` and a full pytest run (23/23 passing).
+
+## ADR-020: `bod-nula` is a periodic snapshot; `agentCodex` stays the dev repo
+
+Checked whether `github.com/mtravnicekarmex/bod-nula.git` (a separate
+repository the owner pushed a copy of this project's content to, under a
+new name) was a faithful, clonable "point zero" for future projects. It
+was — content was file-for-file identical to `agentCodex` (only the
+README title was intentionally changed) and 23/23 tests passed from a
+fresh clone. Found and fixed the same pre-existing hygiene gap in both
+repositories: `.pytest-tmp/` (25 leftover test-fixture files, `bod-nula`
+only) and `.idea/` (7 files, both repos, including two conflicting
+`.iml` files in `bod-nula` — direct evidence of drift from copying without
+cleanup) were tracked in git despite `.gitignore` never covering them
+(this is revision point 1-2 from the very first review, previously
+deferred). Fixed in both: `.gitignore` now excludes both paths, and the
+already-tracked files were untracked via `git rm -r --cached` (owner
+connected the `bod nula` local folder for direct access, same as
+`agentCodex`, rather than being handed manual commands).
+
+- Decided relationship going forward: `agentCodex` remains the framework's
+  own development repository — this is where governance, principles, and
+  the agentic pipeline itself keep evolving. `bod-nula` is a periodic,
+  manually-refreshed snapshot of `agentCodex`, meant to be cloned as the
+  clean starting point for an actual new project; once cloned for a real
+  project it lives its own independent life (own `.md` files, own memory,
+  no further syncing back). `bod-nula`'s own `README.md` now states this
+  explicitly, pointing back to this ADR.
+- Practical note for future snapshots: refresh `bod-nula` from a clean
+  `agentCodex` state (tests passing, no local IDE/test-run cruft) rather
+  than an arbitrary local checkout, so this specific problem does not
+  recur on the next refresh.
+- A stale `.git/index.lock` was left behind by `git rm --cached` in both
+  local folders (the same mounted-filesystem permission quirk seen before
+  with `rm`/`mv`) — harmless to read-only git commands, but needs manual
+  deletion before the owner's next local `git add`/`commit` in either
+  folder.
