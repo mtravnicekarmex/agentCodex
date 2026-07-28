@@ -7,7 +7,7 @@ import pytest
 
 import agent_profile
 from agent import AgentConfig
-from agent_profile import AgentProfile, build_agent_instructions, vytvor_agenta
+from agent_profile import AgentProfile, build_agent_instructions, create_agent
 
 
 def create_profile(tmp_path: Path) -> Path:
@@ -61,7 +61,28 @@ def test_instructions_include_role_and_memory(tmp_path: Path) -> None:
     assert "Architect" in instructions
     assert "Known decision" in instructions
     assert "Current task" in instructions
-    assert "Společná projektová paměť" in instructions
+    assert "Shared project memory" in instructions
+
+
+def test_instructions_include_principles_when_file_exists(tmp_path: Path) -> None:
+    root = create_profile(tmp_path)
+    (root / "PRINCIPLES.md").write_text(
+        "# agentCodex Principles\n\n### P1 - Example\nStatus: Active",
+        encoding="utf-8",
+    )
+    profile = AgentProfile(root, "architect")
+    instructions = build_agent_instructions(profile)
+
+    assert "# Principles" in instructions
+    assert "P1 - Example" in instructions
+
+
+def test_instructions_omit_principles_when_file_missing(tmp_path: Path) -> None:
+    root = create_profile(tmp_path)
+    profile = AgentProfile(root, "architect")
+    instructions = build_agent_instructions(profile)
+
+    assert "<principles>" not in instructions
 
 
 def test_invalid_permission_profile_fails_early(tmp_path: Path) -> None:
@@ -75,7 +96,7 @@ def test_invalid_permission_profile_fails_early(tmp_path: Path) -> None:
         AgentProfile(root, "architect")
 
 
-def test_vytvor_agenta_passes_project_root_as_cwd(
+def test_create_agent_passes_project_root_as_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = create_profile(tmp_path)
@@ -86,17 +107,17 @@ def test_vytvor_agenta_passes_project_root_as_cwd(
         reasoning = "high"
         permission_profile = "review"
 
-        def poloz_dotaz(self, text: str) -> str:
+        def ask(self, text: str) -> str:
             return text
 
-        def zavri(self) -> None:
+        def close(self) -> None:
             return None
 
-    def fake_vytvor_vlakno(*args, **kwargs):
+    def fake_create_thread(*args, **kwargs):
         captured.update(kwargs)
         return FakeThread()
 
-    monkeypatch.setattr(agent_profile, "vytvor_vlakno", fake_vytvor_vlakno)
+    monkeypatch.setattr(agent_profile, "create_thread", fake_create_thread)
 
     config = AgentConfig(
         PROVIDER_CODEX="codex",
@@ -112,10 +133,10 @@ def test_vytvor_agenta_passes_project_root_as_cwd(
         REASONING_HIGH="high",
     )
 
-    agent = vytvor_agenta("architect", config=config, project_root=root)
+    agent = create_agent("architect", config=config, project_root=root)
 
     assert captured["cwd"] == root.resolve()
     assert captured["permission_profile"] == "review"
     assert captured["model"] == "codex-high"
     assert "Architect" in str(captured["instructions"])
-    agent.zavri()
+    agent.close()

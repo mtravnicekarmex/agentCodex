@@ -1,25 +1,39 @@
-Připrav kontrakt pro programátora k tomuto požadavku:
+Prepare a contract for the programmer for this request:
 
 {{TASK}}
 
-Neimplementuj kód. Prostuduj relevantní soubory a vrať pouze platný JSON bez
-dalšího komentáře:
+Do not implement code. Study the relevant files and return only valid JSON,
+with no additional commentary:
 
 {
-  "title": "stručný název",
+  "title": "short title",
+  "purpose": "why we are making this change — the architectural intent, for a human",
+  "intent": "what the implementation deliberately addresses and deliberately does not; how it relates to the existing architecture",
+  "current_state": "briefly, what exists in the repository today and what the change touches",
+  "inputs": "what the implementation builds on (existing modules, API, data)",
+  "outputs": "what the implementation creates or changes (files, public API)",
+  "out_of_scope": "what this change explicitly does not address (SHALL NOT)",
+  "future_evolution": "what is deliberately deferred to later, so the implementation does not try to cover it now",
   "points": [
     {
-      "assignment": "konkrétní bod zadání",
+      "assignment": "concrete requirement (SHALL)",
       "acceptance_criteria": [
-        "ověřitelné kritérium 1",
-        "ověřitelné kritérium 2"
+        "verifiable criterion 1",
+        "verifiable criterion 2"
       ]
     }
   ]
 }
 
-Pravidla:
-- body musí být proveditelné v pořadí,
-- každý bod musí mít jasně ověřitelný výsledek,
-- zahrň testy a dokumentaci jako samostatné body, když jsou potřeba,
-- nezahrnuj nejasné formulace typu „dle potřeby“.
+Rules:
+- "purpose" and "intent" belong to humans — architectural rationale, not a
+  technical description; "points" belong to implementation — a precise,
+  testable specification. Never mix these two layers.
+- the points must be actionable in order,
+- every point must have a clearly verifiable result,
+- include tests and documentation as separate points when needed,
+- do not include vague phrasing like "as needed",
+- if `{{TASK}}` is only about editing an existing contract after
+  CHANGES_REQUESTED from architecture review, take the stated findings
+  into account and return the complete, rewritten content (not just a
+  diff).

@@ -9,12 +9,12 @@ from typing import Literal
 from agent import (
     PERMISSION_PROFILES,
     AgentConfig,
-    AgentVlakno,
+    AgentThread,
     PermissionProfile,
     Provider,
     Reasoning,
     WORKSPACE,
-    vytvor_vlakno,
+    create_thread,
 )
 
 
@@ -33,10 +33,11 @@ class AgentProfileConfig:
     load_private_memory: bool = True
     load_working_state: bool = True
     load_shared_memory: bool = True
+    load_principles: bool = True
 
 
 class AgentProfile:
-    """Načte verzovaný profil jednoho agenta z ``agents/<name>/``."""
+    """Loads a versioned profile for a single agent from ``agents/<name>/``."""
 
     def __init__(self, project_root: Path, agent_name: str) -> None:
         self.project_root = project_root.resolve()
@@ -50,6 +51,7 @@ class AgentProfile:
         self.commands_directory = self.directory / "commands"
         self.runtime_directory = self.directory / "runtime"
         self.thread_file = self.runtime_directory / "thread.json"
+        self.principles_file = self.project_root / "PRINCIPLES.md"
         self.config = self._load_config()
 
     @staticmethod
@@ -57,7 +59,7 @@ class AgentProfile:
         normalized = agent_name.strip()
         if not normalized or not re.fullmatch(r"[A-Za-z0-9_-]+", normalized):
             raise ValueError(
-                "Název agenta smí obsahovat pouze písmena, číslice, '_' a '-'."
+                "Agent name may only contain letters, digits, '_' and '-'."
             )
         return normalized
 
@@ -73,25 +75,25 @@ class AgentProfile:
         missing = sorted(required - data.keys())
         if missing:
             raise ValueError(
-                f"V {self.config_file} chybí položky: {', '.join(missing)}"
+                f"{self.config_file} is missing fields: {', '.join(missing)}"
             )
         if data["name"] != self.agent_name:
             raise ValueError(
-                f"Jméno v config.json ({data['name']!r}) neodpovídá složce "
-                f"agenta ({self.agent_name!r})."
+                f"The name in config.json ({data['name']!r}) does not match "
+                f"the agent's directory ({self.agent_name!r})."
             )
 
         provider = data["provider"]
         if provider not in ("codex", "claude"):
-            raise ValueError(f"Neznámý provider profilu: {provider!r}")
+            raise ValueError(f"Unknown profile provider: {provider!r}")
 
 
         permission_profile = data["permission_profile"]
         if permission_profile not in PERMISSION_PROFILES:
             allowed = ", ".join(PERMISSION_PROFILES)
             raise ValueError(
-                f"Neplatný permission_profile: {permission_profile!r}. "
-                f"Povolené hodnoty: {allowed}."
+                f"Invalid permission_profile: {permission_profile!r}. "
+                f"Allowed values: {allowed}."
             )
 
         model_profile = self._validate_level(data["model_profile"], "model_profile")
@@ -110,24 +112,25 @@ class AgentProfile:
             load_private_memory=bool(data.get("load_private_memory", True)),
             load_working_state=bool(data.get("load_working_state", True)),
             load_shared_memory=bool(data.get("load_shared_memory", True)),
+            load_principles=bool(data.get("load_principles", True)),
         )
 
     @staticmethod
     def _validate_level(value: str, field_name: str) -> ProfileLevel:
         if value not in ("low", "mid", "high"):
             raise ValueError(
-                f"Neplatná hodnota {field_name}: {value!r}. "
-                "Povolené hodnoty: low, mid, high."
+                f"Invalid value for {field_name}: {value!r}. "
+                "Allowed values: low, mid, high."
             )
         return value  # type: ignore[return-value]
 
     @staticmethod
     def _read_required(path: Path) -> str:
         if not path.is_file():
-            raise FileNotFoundError(f"Požadovaný soubor neexistuje: {path}")
+            raise FileNotFoundError(f"Required file does not exist: {path}")
         content = path.read_text(encoding="utf-8").strip()
         if not content:
-            raise ValueError(f"Soubor je prázdný: {path}")
+            raise ValueError(f"File is empty: {path}")
         return content
 
     @staticmethod
@@ -138,6 +141,9 @@ class AgentProfile:
 
     def load_role(self) -> str:
         return self._read_required(self.role_file)
+
+    def load_principles(self) -> str:
+        return self._read_optional(self.principles_file)
 
     def load_private_memory(self) -> str:
         return self._read_optional(self.memory_file)
@@ -156,15 +162,15 @@ class AgentProfile:
         unresolved = sorted(set(re.findall(r"\{\{([A-Z0-9_]+)\}\}", template)))
         if unresolved:
             raise ValueError(
-                f"Příkazu {command_name!r} chybí hodnoty: {', '.join(unresolved)}"
+                f"Command {command_name!r} is missing values: {', '.join(unresolved)}"
             )
         return template
 
 
 class Agent:
-    """Vyšší agentní objekt: profil + technické konverzační vlákno."""
+    """Higher-level agent object: profile + underlying conversational thread."""
 
-    def __init__(self, profile: AgentProfile, thread: AgentVlakno) -> None:
+    def __init__(self, profile: AgentProfile, thread: AgentThread) -> None:
         self.profile = profile
         self.thread = thread
 
@@ -192,23 +198,21 @@ class Agent:
     def permission_profile(self) -> str:
         return self.thread.permission_profile
 
-    def poloz_dotaz(self, text: str) -> str:
-        return self.thread.poloz_dotaz(text)
+    def ask(self, text: str) -> str:
+        return self.thread.ask(text)
 
-    polož_dotaz = poloz_dotaz
-
-    def spust_prikaz(self, command_name: str, **variables: str) -> str:
+    def run_command(self, command_name: str, **variables: str) -> str:
         prompt = self.profile.load_command(command_name, **variables)
-        return self.thread.poloz_dotaz(prompt)
+        return self.thread.ask(prompt)
 
-    def zavri(self) -> None:
-        self.thread.zavri()
+    def close(self) -> None:
+        self.thread.close()
 
     def __enter__(self) -> "Agent":
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-        self.zavri()
+        self.close()
 
 
 def _resolve_provider(profile_provider: Provider, config: AgentConfig) -> Provider:
@@ -218,8 +222,8 @@ def _resolve_provider(profile_provider: Provider, config: AgentConfig) -> Provid
     }[profile_provider]
     if configured != profile_provider:
         raise ValueError(
-            f"Provider profilu {profile_provider!r} neodpovídá hodnotě v .env "
-            f"({configured!r})."
+            f"Profile provider {profile_provider!r} does not match the "
+            f"value in .env ({configured!r})."
         )
     return profile_provider
 
@@ -251,13 +255,25 @@ def _select_reasoning(config: AgentConfig, level: ProfileLevel) -> str:
 def build_agent_instructions(profile: AgentProfile) -> str:
     parts = [profile.load_role()]
 
+    if profile.config.load_principles:
+        principles = profile.load_principles()
+        if principles:
+            parts.append(
+                "# Principles\n\n"
+                "Binding operating principles for this project (constitutional "
+                "layer, takes precedence over habit or convenience, but not "
+                "over an explicit contract requirement or an explicit "
+                "instruction from the owner):\n\n"
+                f"<principles>\n{principles}\n</principles>"
+            )
+
     if profile.config.load_private_memory:
         memory = profile.load_private_memory()
         if memory:
             parts.append(
-                "# Soukromá dlouhodobá paměť\n\n"
-                "Paměť je pomocný kontext; aktuální kód a schválená projektová "
-                "rozhodnutí mají přednost.\n\n"
+                "# Private long-term memory\n\n"
+                "Memory is supporting context; current code and approved "
+                "project decisions take precedence.\n\n"
                 f"<private_memory>\n{memory}\n</private_memory>"
             )
 
@@ -265,41 +281,41 @@ def build_agent_instructions(profile: AgentProfile) -> str:
         state = profile.load_working_state()
         if state:
             parts.append(
-                "# Aktuální pracovní stav\n\n"
+                "# Current working state\n\n"
                 f"<working_state>\n{state}\n</working_state>"
             )
 
     if profile.config.load_shared_memory:
         parts.append(
-            "# Společná projektová paměť\n\n"
-            "Před významnějším úkolem si podle relevance přečti soubory v "
-            "adresáři `memory/`, zejména `PROJECT_STATE.md`, `DECISIONS.md` "
-            "a `OPEN_TASKS.md`. Aktuální zdrojový kód má přednost před starou "
-            "pamětí."
+            "# Shared project memory\n\n"
+            "Before a significant task, read the relevant files in the "
+            "`memory/` directory as needed, especially `PROJECT_STATE.md`, "
+            "`DECISIONS.md`, and `OPEN_TASKS.md`. Current source code takes "
+            "precedence over old memory."
         )
 
     parts.append(
-        "# Technický profil\n\n"
+        "# Technical profile\n\n"
         f"- Agent: `{profile.config.name}`\n"
         f"- Provider: `{profile.config.provider}`\n"
-        f"- Oprávnění: `{profile.config.permission_profile}`\n"
-        f"- Kořen projektu: `{profile.project_root}`\n\n"
-        "Pracuj nad celým projektem. Neomezuj se pouze na svou podsložku "
-        "v `agents/`. Technické omezení sandboxu má vždy přednost před textovou "
-        "instrukcí."
+        f"- Permissions: `{profile.config.permission_profile}`\n"
+        f"- Project root: `{profile.project_root}`\n\n"
+        "Work across the whole project. Do not limit yourself to your own "
+        "subfolder under `agents/`. A technical sandbox restriction always "
+        "takes precedence over a text instruction."
     )
     return "\n\n".join(parts)
 
 
-def vytvor_agenta(
+def create_agent(
     agent_name: str,
     *,
     config: AgentConfig | None = None,
     project_root: Path = WORKSPACE,
 ) -> Agent:
-    """Načte ``agents/<name>/`` a vytvoří nakonfigurovaného agenta."""
+    """Loads ``agents/<name>/`` and creates a configured agent."""
     if config is None:
-        config = AgentConfig.nacti(project_root / ".env")
+        config = AgentConfig.load(project_root / ".env")
 
     profile = AgentProfile(project_root=project_root, agent_name=agent_name)
     provider = _resolve_provider(profile.config.provider, config)
@@ -307,7 +323,7 @@ def vytvor_agenta(
     reasoning = _select_reasoning(config, profile.config.reasoning_profile)
     instructions = build_agent_instructions(profile)
 
-    thread = vytvor_vlakno(
+    thread = create_thread(
         provider=provider,
         model=model,
         reasoning=reasoning,

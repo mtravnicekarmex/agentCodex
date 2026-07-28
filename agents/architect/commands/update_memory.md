@@ -1,7 +1,10 @@
-Na základě právě dokončené práce navrhni aktualizaci souboru `agents/architect/MEMORY.md`.
+Based on the work just completed, propose an update to
+`agents/architect/MEMORY.md`.
 
-Zahrň pouze dlouhodobě užitečné informace: přijatá rozhodnutí, omezení, důvody, známá rizika a opakovaně důležité zkušenosti.
+Include only long-term useful information: accepted decisions,
+limitations, reasons, known risks, and repeatedly important lessons.
 
-Nezahrnuj kompletní konverzaci, dočasné poznámky ani nepotvrzené hypotézy.
+Do not include the full conversation, temporary notes, or unconfirmed
+hypotheses.
 
-Vrať pouze návrh změn. Soubor sám neupravuj.
+Return only the proposed change. Do not edit the file itself.

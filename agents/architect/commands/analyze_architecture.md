@@ -1,17 +1,18 @@
-Proveď architektonickou analýzu následující části projektu:
+Run an architectural analysis of the following part of the project:
 
 {{TASK}}
 
-Před analýzou přečti společná pravidla, profil architecta, jeho paměť a relevantní zdrojové soubory.
+Before the analysis, read the shared rules, the architect's profile, its
+memory, and the relevant source files.
 
-Soubory neupravuj.
+Do not edit files.
 
-Výstup rozděl na:
+Split the output into:
 
-- současný stav,
-- silné stránky,
-- slabá místa,
-- technický dluh,
-- bezpečnostní rizika,
-- návrhy zlepšení,
-- doporučené pořadí dalších kroků.
+- current state,
+- strengths,
+- weaknesses,
+- technical debt,
+- security risks,
+- improvement proposals,
+- recommended order of next steps.

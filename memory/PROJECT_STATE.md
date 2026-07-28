@@ -1,3 +1,6 @@
-# Aktuální stav projektu
+# Current Project State
 
-Projekt poskytuje společné synchronní API pro Codex a Claude vlákna. Nově obsahuje vyšší agentní vrstvu, která načítá profil z `agents/<name>/` a nadále používá stávající `vytvor_vlakno()` jako technický základ.
+The project provides a shared synchronous API for Codex and Claude threads.
+It now also includes a higher-level agent layer that loads a profile from
+`agents/<name>/` and continues to use the existing `create_thread()` as its
+technical foundation.

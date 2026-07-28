@@ -1,6 +1,6 @@
 # Agent Suggestions
 
-Jednotné profily oprávnění pro `vytvor_vlakno` i `vytvor_agenta`:
+Shared permission profiles for both `create_thread` and `create_agent`:
 
 ```python
 PERMISSION_REVIEW = "review"
@@ -8,10 +8,10 @@ PERMISSION_EDIT = "edit"
 PERMISSION_FULL = "full"
 ```
 
-## Doporučené použití
+## Recommended usage
 
-- `review`: analýza a návrhy bez změn souborů,
-- `edit`: bezpečnější implementační práce v workspace,
-- `full`: pouze izolované nebo důvěryhodné úlohy.
+- `review`: analysis and proposals without changing files,
+- `edit`: safer implementation work in the workspace,
+- `full`: isolated or trusted tasks only.
 
-Profilovaný agent vybírá oprávnění z `agents/<name>/config.json`.
+A profiled agent picks its permissions from `agents/<name>/config.json`.

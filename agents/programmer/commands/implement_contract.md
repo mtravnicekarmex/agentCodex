@@ -1,31 +1,36 @@
-Implementuj tento kontrakt:
+Implement this contract:
 
-Soubor: {{CONTRACT_PATH}}
+File: {{CONTRACT_PATH}}
 
-Obsah:
+Content:
 <contract>
 {{CONTRACT_CONTENT}}
 </contract>
 
-Proveď skutečné změny ve zdrojových souborech. Po dokončení vrať pouze platný JSON:
+Make actual changes to the source files. When done, return only valid
+JSON:
 
 {
-  "summary": "souhrn implementace",
+  "summary": "implementation summary",
   "notes": [
     {
       "point": 1,
-      "note": "co bylo konkrétně provedeno",
+      "note": "what was concretely done",
       "files": ["agent.py"],
       "tests": ["python -m pytest -v — 8 passed"]
     }
   ],
   "tests": [
-    "souhrnný test nebo kontrola"
+    "an overall test or check"
   ]
 }
 
-Pravidla:
-- notes musí obsahovat právě jednu položku pro každý bod kontraktu,
-- čísla point musí odpovídat kontraktu,
-- uváděj jen skutečně změněné soubory a skutečně spuštěné testy,
-- pokud něco nelze dokončit, popiš blokaci pravdivě; nevydávej bod za hotový.
+Rules:
+- notes must contain exactly one entry for every point of the contract,
+- the point numbers must match the contract,
+- list only files actually changed and tests actually run,
+- if something cannot be finished, describe the blocker truthfully; do
+  not present a point as done,
+- if a point requires a decision the contract does not make, do not
+  invent one — implement only what is unambiguous, describe the gap in
+  that point's note, and mention it in the overall summary.

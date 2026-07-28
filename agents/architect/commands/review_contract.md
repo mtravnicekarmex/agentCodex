@@ -1,40 +1,47 @@
-Proveď architektonické review implementace tohoto kontraktu:
+Run implementation review on this contract — AFTER implementation, against
+the Acceptance Criteria of each point (as opposed to architecture review,
+which assesses the contract itself before implementation):
 
-Soubor: {{CONTRACT_PATH}}
+File: {{CONTRACT_PATH}}
 
-Obsah kontraktu:
+Contract content:
 <contract>
 {{CONTRACT_CONTENT}}
 </contract>
 
-Přečti aktuální změněné zdrojové soubory a testy. Zkontroluj každý bod kontraktu.
-Vrať pouze platný JSON:
+Read the actual changed source files and tests. Check every point of the
+contract. You did not run the contract's architecture review yourself —
+also read the `# Architecture Review` section (the reviewer's rounds and
+findings) so you check the implementation against what was actually
+accepted, not only the original point text in isolation; if the reviewer's
+findings clarified or narrowed a point, that clarification is part of the
+requirement. Return only valid JSON:
 
 {
   "approved": true,
-  "summary": "celkové review",
+  "summary": "overall review",
   "reviews": [
     {
       "point": 1,
       "status": "APPROVED",
-      "review": "konkrétní zjištění a ověření"
+      "review": "concrete findings and verification"
     }
   ],
   "memory_updates": [
     {
       "path": "memory/DECISIONS.md",
-      "text": "trvalé a ověřené zjištění"
+      "text": "a permanent, verified finding"
     },
     {
       "path": "agents/programmer/MEMORY.md",
-      "text": "zjištění důležité pro další práci programátora"
+      "text": "a finding important for the programmer's future work"
     }
   ]
 }
 
-Pravidla:
-- review musí existovat pro každý bod,
-- status je pouze APPROVED nebo CHANGES_REQUESTED,
-- approved smí být true jen tehdy, když jsou všechny body APPROVED,
-- memory_updates mohou být prázdný seznam,
-- do paměti neukládej celý kontrakt ani dočasné detaily.
+Rules:
+- a review must exist for every point,
+- status is only APPROVED or CHANGES_REQUESTED,
+- approved may only be true when every point is APPROVED,
+- memory_updates may be an empty list,
+- do not store the whole contract or temporary details in memory.

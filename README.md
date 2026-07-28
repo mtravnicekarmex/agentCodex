@@ -1,13 +1,15 @@
 # agentCodex
 
-Tenká vrstva nad Codex SDK a Claude Agent SDK se společným synchronním rozhraním.
+A thin layer over the Codex SDK and the Claude Agent SDK with a shared
+synchronous interface.
 
-Projekt má dvě úrovně API:
+The project has two API levels:
 
-- `vytvor_vlakno(...)` – nízkoúrovňové technické vlákno,
-- `vytvor_agenta("architect", ...)` – profilovaný agent s rolí, pamětí a příkazy.
+- `create_thread(...)` – the low-level technical thread,
+- `create_agent("architect", ...)` – a profiled agent with a role, memory,
+  and commands.
 
-## Instalace
+## Installation
 
 ```powershell
 python -m venv .venv
@@ -15,93 +17,147 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## Přihlášení
+## Login
 
 ```powershell
 python agent.py
 ```
 
-## Profilovaný agent
+## Profiled agent
 
 ```python
 from agent import AgentConfig
-from agent_profile import vytvor_agenta
+from agent_profile import create_agent
 
-config = AgentConfig.nacti()
+config = AgentConfig.load()
 
-with vytvor_agenta("architect", config=config) as architect:
-    print(architect.poloz_dotaz("Posuď návrh nové vrstvy."))
+with create_agent("architect", config=config) as architect:
+    print(architect.ask("Review the design of the new layer."))
 ```
 
-## Interaktivní workflow architect → programmer → architect
+## Interactive workflow architect → reviewer → programmer → architect
 
-Spusťte:
+Run:
 
 ```powershell
 python agent_console.py
 ```
 
-Nejdůležitější příkazy:
+Most important commands:
 
 ```text
-/new <téma>   architect vytvoří CONTRACT - NNNN.md
-/work         programmer převezme a implementuje nejbližší kontrakt
-/review       architect provede review každého bodu
-/status       zobrazí frontu a předání
+/new <topic>       architect creates IMPLEMENTATION_CONTRACT_NNNN.md (DRAFT);
+                  from there the pipeline runs automatically (architecture
+                  review, and if ACCEPTED, implementation and implementation
+                  review too) and stops once it returns to the architect
+/revise <n> <topic> architect rewrites the contract's requirements after
+                  CHANGES_REQUESTED from architecture review, resubmits it
+                  for review, and continues automatically the same way
+/work [n]         manual override: programmer picks up contract <n> (or the
+                  next ready one) — not needed in the normal flow
+/review [n]       manual override: architect runs implementation review on
+                  contract <n> (or the next ready one) — not needed in the
+                  normal flow
+/commit <n>       after discussing the implementation review result with
+                  the architect and agreeing it is sufficient, commits and
+                  pushes contract <n> (must be APPROVED)
+/status           shows the queue and handoffs
 /inbox <agent>
 ```
 
-### Životní cyklus
+### Lifecycle
+
+Three roles, two review gates, after the Tr5 Platform Implementation
+Contract pattern (Architect / Architecture Reviewer / Implementation
+Agent): the contract is first assessed by an INDEPENDENT reviewer, before
+the programmer ever sees it (Architecture Review); after implementation the
+architect assesses the result (Implementation Review). The architect never
+approves its own proposal.
+
+Owner approval happens once, at `/new`/`/revise` — from there the pipeline
+runs unattended (architecture review → programmer → implementation review)
+and stops again only once it returns to the architect, whatever the
+verdict (`APPROVED` or `CHANGES_REQUESTED`), the same way
+`ARCHITECTURE_CHANGES_REQUESTED`/`REJECTED` already stop there today (see
+ADR-018).
+
+Two git checkpoints (see ADR-019): right after architecture review accepts
+a contract, before the programmer touches anything, the working tree is
+committed and pushed as `CONTRACT_NNNN` — the last clean state before
+implementation starts. After implementation review, once the owner has
+discussed the result with the architect and both agree it is sufficient,
+`/commit <n>` commits and pushes as `CONTRACT_NNNN - IMPLEMENTED`. Neither
+commit happens if there is nothing to commit.
 
 ```text
-architect
-  READY_FOR_PROGRAMMER
-      ↓
+architect (create_contract)
+  DRAFT → reviewer
+                ↓  architecture review
+  ACCEPTED → READY_FOR_PROGRAMMER          CHANGES_REQUESTED → ARCHITECTURE_CHANGES_REQUESTED → architect (/revise → back to reviewer)
+      ↓                                      REJECTED → REJECTED (end, permanent record) → architect
 programmer
   IN_PROGRESS
   READY_FOR_ARCHITECT_REVIEW
-      ↓
+      ↓  implementation review (architect)
 architect
   APPROVED → owner
   CHANGES_REQUESTED → programmer
 ```
 
-Každý kontrakt obsahuje:
+Every contract contains (structure per the Tr5 Document Standard):
 
-- zadání a akceptační kritéria každého bodu,
-- poznámku programátora ke každému bodu,
-- dotčené soubory a testy,
-- review architekta ke každému bodu,
-- souhrn obou agentů,
-- aktuální stav a adresáta předání.
+- Purpose and Intent — the architectural rationale, kept separate from the
+  requirements,
+- Current State, Inputs, Outputs, Out of Scope, Future Evolution,
+- the requirements and acceptance criteria for every point (Functional
+  Requirements),
+- the programmer's note for every point, files touched, and tests,
+- Architecture Review and Implementation Review as append-only rounds
+  (`### Round N`) — review history is never overwritten,
+- Completion Notes, Lessons Learned,
+- current status and who it is handed off to.
 
-Oznámení se zapisují do `agents/<agent>/INBOX.md`. Po schválení je zpráva
-zapsána do `contracts/OWNER_INBOX.md`.
+Notifications are written to `agents/<agent>/INBOX.md`. Once approved, a
+message is written to `contracts/OWNER_INBOX.md`.
 
-Architect může v review navrhnout řízené zápisy do:
+During review the architect (implementation review) or reviewer
+(architecture review) may propose controlled writes to:
 
 ```text
 memory/*.md
 agents/<agent>/MEMORY.md
 agents/<agent>/WORKING_STATE.md
+PRINCIPLES.md
 ```
 
-Hostitelský kód jiné cíle odmítne.
+The host code rejects any other target.
 
-## Oprávnění
+## Permissions
 
-| Profil | Účel |
+| Profile | Purpose |
 | --- | --- |
-| `review` | čtení a analýza bez změny kódu |
-| `edit` | úpravy souborů v pracovním projektu |
-| `full` | plný přístup včetně shellu; používat výjimečně |
+| `review` | reading and analysis without changing code |
+| `edit` | implementation work in the working project |
+| `full` | full access including the shell; use sparingly |
 
-Výchozí workflow používá:
+The default workflow uses:
 
 - architect: `review`,
+- reviewer: `review`,
 - programmer: `edit`.
 
-## Testy
+## Roles
+
+Mapping onto the Tr5 Platform Document Standard (Architect / Architecture
+Reviewer / Implementation Agent):
+
+| Agent | Tr5 role | Responsibility |
+| --- | --- | --- |
+| `architect` | Architect | Drafts contracts (Purpose/Intent/points); runs implementation review after implementation. |
+| `reviewer` | Architecture Reviewer | Independently assesses the contract BEFORE implementation; the architect never approves its own proposal. |
+| `programmer` | Implementation Agent | Implements exclusively what the contract specifies after architecture review `ACCEPTED`. |
+
+## Tests
 
 ```powershell
 python -m pytest -v

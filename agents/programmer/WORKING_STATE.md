@@ -1,3 +1,3 @@
-# Aktuální pracovní stav
+# Current Working State
 
-Žádný aktivní kontrakt.
+No active contract.

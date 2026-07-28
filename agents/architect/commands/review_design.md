@@ -1,17 +1,17 @@
-Proveď nezávislou architektonickou revizi:
+Run an independent architectural review:
 
 {{TASK}}
 
-Prověř zejména:
+Check especially:
 
-- konzistenci veřejného API,
-- oddělení provider-specifického kódu,
-- správu životního cyklu vláken,
-- správu paměti,
-- oprávnění a sandbox,
-- souběh a thread safety,
-- zpracování chyb,
-- zpětnou kompatibilitu,
-- testovatelnost.
+- public API consistency,
+- separation of provider-specific code,
+- thread lifecycle management,
+- memory management,
+- permissions and sandbox,
+- concurrency and thread safety,
+- error handling,
+- backward compatibility,
+- testability.
 
-Nálezy rozděl podle závažnosti. Soubory neupravuj.
+Split findings by severity. Do not edit files.

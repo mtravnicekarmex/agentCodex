@@ -1,3 +1,3 @@
-# Dlouhodobá paměť programátora
+# Long-Term Memory: Programmer Agent
 
-Zatím bez záznamů.
+No entries yet.

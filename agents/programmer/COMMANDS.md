@@ -1,3 +1,4 @@
-# Příkazy programátora
+# Programmer's Commands
 
-- `implement_contract` — převezme kontrakt, implementuje jeho body a vrátí poznámky.
+- `implement_contract` — picks up a contract, implements its points, and
+  returns notes.

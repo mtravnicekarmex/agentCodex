@@ -1,6 +1,6 @@
-# Otevřené úkoly
+# Open Tasks
 
-- [ ] Implementovat perzistenci a obnovení Codex vláken.
-- [ ] Navrhnout obnovení relace pro Claude.
-- [ ] Doplnit řízený zápis do soukromé paměti agentů.
-- [ ] Přidat profily `programmer`, `reviewer` a `coordinator`.
+- [ ] Implement persistence and resumption of Codex threads.
+- [ ] Design an equivalent session resumption for Claude.
+- [ ] Add controlled writes to agents' private memory.
+- [ ] Add a `coordinator` profile (`programmer` and `reviewer` already exist).

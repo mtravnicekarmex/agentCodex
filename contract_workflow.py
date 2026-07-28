@@ -9,6 +9,9 @@ from typing import Any, Literal
 
 
 ContractStatus = Literal[
+    "DRAFT",
+    "ARCHITECTURE_CHANGES_REQUESTED",
+    "REJECTED",
     "READY_FOR_PROGRAMMER",
     "IN_PROGRESS",
     "READY_FOR_ARCHITECT_REVIEW",
@@ -18,7 +21,9 @@ ContractStatus = Literal[
 
 PointStatus = Literal["PENDING", "IMPLEMENTED", "APPROVED", "CHANGES_REQUESTED"]
 
-CONTRACT_FILE_RE = re.compile(r"^CONTRACT - (\d{4})\.md$")
+ArchitectureVerdict = Literal["ACCEPTED", "REJECTED", "CHANGES_REQUESTED"]
+
+CONTRACT_FILE_RE = re.compile(r"^IMPLEMENTATION_CONTRACT_(\d{4})\.md$")
 META_RE = re.compile(
     r"<!-- CONTRACT-META\s*(\{.*?\})\s*CONTRACT-META -->",
     re.DOTALL,
@@ -27,6 +32,7 @@ META_RE = re.compile(
 ALLOWED_MEMORY_TARGETS = (
     re.compile(r"^memory/[A-Za-z0-9_.-]+\.md$"),
     re.compile(r"^agents/[A-Za-z0-9_-]+/(MEMORY|WORKING_STATE)\.md$"),
+    re.compile(r"^PRINCIPLES\.md$"),
 )
 
 
@@ -53,8 +59,22 @@ class Contract:
     created_at: str
     updated_at: str
     points: list[ContractPoint]
-    programmer_summary: str = ""
-    architect_summary: str = ""
+    implementer: str = "programmer"
+    reviewer: str = "reviewer"
+    # Why (human-readable architectural intent) — separate from the What (points).
+    purpose: str = ""
+    intent: str = ""
+    current_state: str = ""
+    inputs: str = ""
+    outputs: str = ""
+    out_of_scope: str = ""
+    future_evolution: str = ""
+    lessons_learned: str = ""
+    # Append-only round history for both review gates. Never overwritten,
+    # only appended to — a round represents one verdict at one point in time.
+    architecture_review_rounds: list[dict[str, Any]] = field(default_factory=list)
+    completion_notes: str = ""
+    implementation_review_rounds: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -64,7 +84,24 @@ class MemoryUpdate:
 
 
 class ContractStore:
-    """Souborová fronta kontraktů a předání mezi agenty."""
+    """File-backed contract queue and handoff between agents.
+
+    Pipeline (two review gates, three roles, after the Tr5 Implementation
+    Contract pattern: Architect / Architecture Reviewer / Implementation Agent):
+
+        create_contract (architect)  -> DRAFT                (-> reviewer)
+        record_architecture_review (reviewer):
+            ACCEPTED             -> READY_FOR_PROGRAMMER      (-> implementer)
+            CHANGES_REQUESTED    -> ARCHITECTURE_CHANGES_REQUESTED (-> architect)
+            REJECTED             -> REJECTED                  (-> architect)
+        revise_contract (architect, only from ARCHITECTURE_CHANGES_REQUESTED)
+            -> DRAFT                                          (-> reviewer)
+        claim (programmer)          -> IN_PROGRESS
+        record_programmer_result    -> READY_FOR_ARCHITECT_REVIEW (-> architect)
+        record_implementation_review (architect):
+            APPROVED (all points) -> APPROVED (-> owner)
+            otherwise              -> CHANGES_REQUESTED (-> implementer)
+    """
 
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root.resolve()
@@ -76,63 +113,103 @@ class ContractStore:
         title: str,
         points: list[dict[str, Any]],
         *,
+        purpose: str = "",
+        intent: str = "",
+        current_state: str = "",
+        inputs: str = "",
+        outputs: str = "",
+        out_of_scope: str = "",
+        future_evolution: str = "",
         created_by: str = "architect",
-        assigned_to: str = "programmer",
+        implementer: str = "programmer",
+        reviewer: str = "reviewer",
     ) -> Contract:
         if not title.strip():
-            raise ValueError("Kontrakt musí mít název.")
-        if not points:
-            raise ValueError("Kontrakt musí obsahovat alespoň jeden bod.")
+            raise ValueError("A contract must have a title.")
 
         number = self.next_number()
         now = _timestamp()
-        contract_points: list[ContractPoint] = []
-
-        for index, raw in enumerate(points, start=1):
-            assignment = str(raw.get("assignment") or raw.get("description") or "").strip()
-            if not assignment:
-                raise ValueError(f"Bod {index} nemá zadání.")
-            criteria = raw.get("acceptance_criteria", [])
-            if not isinstance(criteria, list):
-                raise ValueError(f"acceptance_criteria bodu {index} musí být seznam.")
-            contract_points.append(
-                ContractPoint(
-                    number=index,
-                    assignment=assignment,
-                    acceptance_criteria=[str(item).strip() for item in criteria if str(item).strip()],
-                )
-            )
+        contract_points = _build_points(points)
 
         contract = Contract(
             number=number,
             title=title.strip(),
-            status="READY_FOR_PROGRAMMER",
+            status="DRAFT",
             created_by=created_by,
-            assigned_to=assigned_to,
-            handoff_to=assigned_to,
+            assigned_to=reviewer,
+            handoff_to=reviewer,
             created_at=now,
             updated_at=now,
             points=contract_points,
+            implementer=implementer,
+            reviewer=reviewer,
+            purpose=purpose.strip(),
+            intent=intent.strip(),
+            current_state=current_state.strip(),
+            inputs=inputs.strip(),
+            outputs=outputs.strip(),
+            out_of_scope=out_of_scope.strip(),
+            future_evolution=future_evolution.strip(),
         )
         self.save(contract)
-        self.notify(
-            to_agent=assigned_to,
-            from_agent=created_by,
-            contract=contract,
-            event="Kontrakt je připraven k implementaci.",
-        )
+        return contract
+
+    def revise_contract(
+        self,
+        number: int,
+        title: str,
+        points: list[dict[str, Any]],
+        *,
+        purpose: str = "",
+        intent: str = "",
+        current_state: str = "",
+        inputs: str = "",
+        outputs: str = "",
+        out_of_scope: str = "",
+        future_evolution: str = "",
+    ) -> Contract:
+        """Rewrite the requirements of a contract returned by the reviewer.
+
+        Only allowed in ARCHITECTURE_CHANGES_REQUESTED — before a contract is
+        accepted, no permanent history exists yet (no implementation, no
+        inserted annotations), so rewriting the requirements does not violate
+        the append-only rule. The history of past architecture review rounds
+        (`architecture_review_rounds`) is never cleared. After revision the
+        contract returns to DRAFT and is handed back to the reviewer.
+        """
+        contract = self.load(number)
+        if contract.status != "ARCHITECTURE_CHANGES_REQUESTED":
+            raise ValueError(
+                f"Contract {number:04d} cannot be edited in status {contract.status}."
+            )
+        if not title.strip():
+            raise ValueError("A contract must have a title.")
+
+        contract.title = title.strip()
+        contract.points = _build_points(points)
+        contract.purpose = purpose.strip()
+        contract.intent = intent.strip()
+        contract.current_state = current_state.strip()
+        contract.inputs = inputs.strip()
+        contract.outputs = outputs.strip()
+        contract.out_of_scope = out_of_scope.strip()
+        contract.future_evolution = future_evolution.strip()
+        contract.status = "DRAFT"
+        contract.assigned_to = contract.reviewer
+        contract.handoff_to = contract.reviewer
+        self.save(contract)
         return contract
 
     def next_number(self) -> int:
         numbers = []
-        for path in self.contracts_dir.glob("CONTRACT - *.md"):
+        for path in self.contracts_dir.glob("IMPLEMENTATION_CONTRACT_*.md"):
             match = CONTRACT_FILE_RE.match(path.name)
             if match:
                 numbers.append(int(match.group(1)))
         return max(numbers, default=0) + 1
 
     def path_for(self, number: int) -> Path:
-        return self.contracts_dir / f"CONTRACT - {number:04d}.md"
+        return self.contracts_dir / f"IMPLEMENTATION_CONTRACT_{number:04d}.md"
 
     def save(self, contract: Contract) -> Path:
         contract.updated_at = _timestamp()
@@ -143,7 +220,7 @@ class ContractStore:
     def load(self, number: int) -> Contract:
         path = self.path_for(number)
         if not path.is_file():
-            raise FileNotFoundError(f"Kontrakt neexistuje: {path}")
+            raise FileNotFoundError(f"Contract does not exist: {path}")
         return parse_contract(path.read_text(encoding="utf-8"))
 
     def list_contracts(
@@ -153,7 +230,7 @@ class ContractStore:
         statuses: set[str] | None = None,
     ) -> list[Contract]:
         contracts: list[Contract] = []
-        for path in sorted(self.contracts_dir.glob("CONTRACT - *.md")):
+        for path in sorted(self.contracts_dir.glob("IMPLEMENTATION_CONTRACT_*.md")):
             match = CONTRACT_FILE_RE.match(path.name)
             if not match:
                 continue
@@ -165,6 +242,20 @@ class ContractStore:
             contracts.append(contract)
         return contracts
 
+    def next_for_architecture_review(self) -> Contract | None:
+        contracts = self.list_contracts(
+            assigned_to="reviewer",
+            statuses={"DRAFT"},
+        )
+        return contracts[0] if contracts else None
+
+    def next_for_revision(self) -> Contract | None:
+        contracts = self.list_contracts(
+            assigned_to="architect",
+            statuses={"ARCHITECTURE_CHANGES_REQUESTED"},
+        )
+        return contracts[0] if contracts else None
+
     def next_for_programmer(self) -> Contract | None:
         contracts = self.list_contracts(
             assigned_to="programmer",
@@ -172,23 +263,84 @@ class ContractStore:
         )
         return contracts[0] if contracts else None
 
-    def next_for_architect_review(self) -> Contract | None:
+    def next_for_implementation_review(self) -> Contract | None:
         contracts = self.list_contracts(
             assigned_to="architect",
             statuses={"READY_FOR_ARCHITECT_REVIEW"},
         )
         return contracts[0] if contracts else None
 
+    def record_architecture_review(
+        self,
+        number: int,
+        *,
+        verdict: ArchitectureVerdict | str,
+        findings: str,
+        memory_updates: list[MemoryUpdate] | None = None,
+        from_agent: str = "reviewer",
+    ) -> Contract:
+        contract = self.load(number)
+        if contract.status != "DRAFT":
+            raise ValueError(
+                f"Architecture review can only be recorded in status DRAFT, "
+                f"currently {contract.status}."
+            )
+        verdict_upper = str(verdict).upper()
+        if verdict_upper not in {"ACCEPTED", "REJECTED", "CHANGES_REQUESTED"}:
+            raise ValueError(f"Invalid architecture review verdict: {verdict!r}.")
+        findings_text = findings.strip()
+        if not findings_text:
+            raise ValueError("Architecture review must include findings.")
+
+        round_number = len(contract.architecture_review_rounds) + 1
+        contract.architecture_review_rounds.append(
+            {
+                "round": round_number,
+                "date": _timestamp(),
+                "verdict": verdict_upper,
+                "findings": findings_text,
+            }
+        )
+
+        if verdict_upper == "ACCEPTED":
+            contract.status = "READY_FOR_PROGRAMMER"
+            contract.assigned_to = contract.implementer
+            contract.handoff_to = contract.implementer
+            event = "Contract passed architecture review and is ready for implementation."
+        elif verdict_upper == "CHANGES_REQUESTED":
+            contract.status = "ARCHITECTURE_CHANGES_REQUESTED"
+            contract.assigned_to = contract.created_by
+            contract.handoff_to = contract.created_by
+            event = "Architecture review requires the contract to be revised (see revise_contract)."
+        else:
+            contract.status = "REJECTED"
+            contract.assigned_to = contract.created_by
+            contract.handoff_to = contract.created_by
+            event = "Contract was rejected in architecture review."
+
+        self.save(contract)
+
+        for update in memory_updates or []:
+            self.append_memory(update, source=f"IMPLEMENTATION_CONTRACT_{number:04d}")
+
+        self.notify(
+            to_agent=contract.handoff_to,
+            from_agent=from_agent,
+            contract=contract,
+            event=event,
+        )
+        return contract
+
     def claim(self, number: int, *, agent: str = "programmer") -> Contract:
         contract = self.load(number)
         if contract.handoff_to != agent:
             raise ValueError(
-                f"Kontrakt {number:04d} je předán agentovi {contract.handoff_to!r}, "
-                f"nikoli {agent!r}."
+                f"Contract {number:04d} is handed off to agent {contract.handoff_to!r}, "
+                f"not {agent!r}."
             )
         if contract.status not in {"READY_FOR_PROGRAMMER", "CHANGES_REQUESTED"}:
             raise ValueError(
-                f"Kontrakt {number:04d} nelze převzít ve stavu {contract.status}."
+                f"Contract {number:04d} cannot be claimed in status {contract.status}."
             )
         contract.status = "IN_PROGRESS"
         contract.assigned_to = agent
@@ -209,15 +361,15 @@ class ContractStore:
         contract = self.load(number)
         if contract.status != "IN_PROGRESS":
             raise ValueError(
-                f"Programátorský výstup lze zapsat pouze ve stavu IN_PROGRESS, "
-                f"aktuálně {contract.status}."
+                f"Programmer output can only be recorded in status IN_PROGRESS, "
+                f"currently {contract.status}."
             )
 
         by_number = {int(item["point"]): item for item in notes}
         missing = [point.number for point in contract.points if point.number not in by_number]
         if missing:
             raise ValueError(
-                "Programátor musí dodat poznámku ke každému bodu. Chybí body: "
+                "The programmer must provide a note for every point. Missing points: "
                 + ", ".join(map(str, missing))
             )
 
@@ -226,7 +378,7 @@ class ContractStore:
             raw = by_number[point.number]
             note = str(raw.get("note", "")).strip()
             if not note:
-                raise ValueError(f"Programátorská poznámka k bodu {point.number} je prázdná.")
+                raise ValueError(f"Programmer note for point {point.number} is empty.")
             point.programmer_note = note
             point.programmer_files = [
                 str(item).strip() for item in raw.get("files", []) if str(item).strip()
@@ -236,7 +388,7 @@ class ContractStore:
             ] or global_tests
             point.status = "IMPLEMENTED"
 
-        contract.programmer_summary = summary.strip()
+        contract.completion_notes = summary.strip()
         contract.status = "READY_FOR_ARCHITECT_REVIEW"
         contract.assigned_to = to_agent
         contract.handoff_to = to_agent
@@ -245,11 +397,11 @@ class ContractStore:
             to_agent=to_agent,
             from_agent=from_agent,
             contract=contract,
-            event="Implementace je hotová a čeká na review.",
+            event="Implementation is done and awaiting implementation review.",
         )
         return contract
 
-    def record_architect_review(
+    def record_implementation_review(
         self,
         number: int,
         *,
@@ -258,20 +410,21 @@ class ContractStore:
         reviews: list[dict[str, Any]],
         memory_updates: list[MemoryUpdate] | None = None,
         from_agent: str = "architect",
-        to_agent: str = "programmer",
+        to_agent: str | None = None,
     ) -> Contract:
         contract = self.load(number)
         if contract.status != "READY_FOR_ARCHITECT_REVIEW":
             raise ValueError(
-                f"Review lze zapsat pouze ve stavu READY_FOR_ARCHITECT_REVIEW, "
-                f"aktuálně {contract.status}."
+                f"Implementation review can only be recorded in status "
+                f"READY_FOR_ARCHITECT_REVIEW, currently {contract.status}."
             )
+        to_agent = to_agent or contract.implementer
 
         by_number = {int(item["point"]): item for item in reviews}
         missing = [point.number for point in contract.points if point.number not in by_number]
         if missing:
             raise ValueError(
-                "Architect musí dodat review ke každému bodu. Chybí body: "
+                "The architect must provide a review for every point. Missing points: "
                 + ", ".join(map(str, missing))
             )
 
@@ -282,32 +435,45 @@ class ContractStore:
             status = str(raw.get("status", "")).upper()
             if status not in {"APPROVED", "CHANGES_REQUESTED"}:
                 raise ValueError(
-                    f"Neplatný stav review bodu {point.number}: {status!r}."
+                    f"Invalid review status for point {point.number}: {status!r}."
                 )
             if not review:
-                raise ValueError(f"Review bodu {point.number} je prázdné.")
+                raise ValueError(f"Review for point {point.number} is empty.")
             point.architect_review = review
             point.status = status  # type: ignore[assignment]
             any_changes = any_changes or status == "CHANGES_REQUESTED"
 
         effective_approved = approved and not any_changes
-        contract.architect_summary = summary.strip()
+        summary_text = summary.strip()
+        round_number = len(contract.implementation_review_rounds) + 1
+        contract.implementation_review_rounds.append(
+            {
+                "round": round_number,
+                "date": _timestamp(),
+                "verdict": "APPROVED" if effective_approved else "CHANGES_REQUESTED",
+                "summary": summary_text,
+                "reviews": [
+                    {"point": point.number, "status": point.status, "review": point.architect_review}
+                    for point in contract.points
+                ],
+            }
+        )
         contract.status = "APPROVED" if effective_approved else "CHANGES_REQUESTED"
         contract.assigned_to = "owner" if effective_approved else to_agent
         contract.handoff_to = "owner" if effective_approved else to_agent
         self.save(contract)
 
         for update in memory_updates or []:
-            self.append_memory(update, source=f"CONTRACT {number:04d}")
+            self.append_memory(update, source=f"IMPLEMENTATION_CONTRACT_{number:04d}")
 
         self.notify(
             to_agent=contract.handoff_to,
             from_agent=from_agent,
             contract=contract,
             event=(
-                "Kontrakt byl schválen."
+                "Contract was approved."
                 if effective_approved
-                else "Review požaduje další změny."
+                else "Implementation review requires further changes."
             ),
         )
         return contract
@@ -316,16 +482,17 @@ class ContractStore:
         relative = update.path.replace("\\", "/").strip("/")
         if not any(pattern.fullmatch(relative) for pattern in ALLOWED_MEMORY_TARGETS):
             raise ValueError(
-                f"Nepovolený cíl paměti {update.path!r}. "
-                "Povoleno je memory/*.md a agents/*/(MEMORY|WORKING_STATE).md."
+                f"Disallowed memory target {update.path!r}. "
+                "Only memory/*.md, agents/*/(MEMORY|WORKING_STATE).md, and "
+                "PRINCIPLES.md are allowed."
             )
         text = update.text.strip()
         if not text:
-            raise ValueError("Zápis do paměti nesmí být prázdný.")
+            raise ValueError("A memory entry must not be empty.")
 
         path = (self.project_root / relative).resolve()
         if self.project_root not in path.parents:
-            raise ValueError("Cíl paměti leží mimo projekt.")
+            raise ValueError("Memory target is outside the project.")
         path.parent.mkdir(parents=True, exist_ok=True)
         existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
         entry = (
@@ -356,84 +523,219 @@ class ContractStore:
         )
         relative_contract = self.path_for(contract.number).relative_to(self.project_root)
         entry = (
-            f"\n\n## {_timestamp()} — CONTRACT {contract.number:04d}\n\n"
-            f"- Od: `{from_agent}`\n"
-            f"- Stav: `{contract.status}`\n"
-            f"- Soubor: `{relative_contract.as_posix()}`\n"
-            f"- Zpráva: {event}\n"
+            f"\n\n## {_timestamp()} — IMPLEMENTATION_CONTRACT_{contract.number:04d}\n\n"
+            f"- From: `{from_agent}`\n"
+            f"- Status: `{contract.status}`\n"
+            f"- File: `{relative_contract.as_posix()}`\n"
+            f"- Message: {event}\n"
         )
         path.write_text(existing + entry, encoding="utf-8")
         return path
 
 
+def _build_points(points: list[dict[str, Any]]) -> list[ContractPoint]:
+    if not points:
+        raise ValueError("A contract must contain at least one point.")
+    contract_points: list[ContractPoint] = []
+    for index, raw in enumerate(points, start=1):
+        assignment = str(raw.get("assignment") or raw.get("description") or "").strip()
+        if not assignment:
+            raise ValueError(f"Point {index} has no assignment.")
+        criteria = raw.get("acceptance_criteria", [])
+        if not isinstance(criteria, list):
+            raise ValueError(f"acceptance_criteria for point {index} must be a list.")
+        contract_points.append(
+            ContractPoint(
+                number=index,
+                assignment=assignment,
+                acceptance_criteria=[str(item).strip() for item in criteria if str(item).strip()],
+            )
+        )
+    return contract_points
+
+
 def render_contract(contract: Contract) -> str:
     meta = json.dumps(asdict(contract), ensure_ascii=False, indent=2)
-    lines = [
-        f"# CONTRACT {contract.number:04d} — {contract.title}",
+    lines: list[str] = [
+        f"# IMPLEMENTATION_CONTRACT_{contract.number:04d}",
         "",
-        f"- **Status:** `{contract.status}`",
-        f"- **Vytvořil:** `{contract.created_by}`",
-        f"- **Aktuálně řeší:** `{contract.assigned_to}`",
-        f"- **Předáno komu:** `{contract.handoff_to}`",
-        f"- **Vytvořeno:** `{contract.created_at}`",
-        f"- **Aktualizováno:** `{contract.updated_at}`",
+        f"Status: {contract.status}",
         "",
-        "## Body kontraktu",
+        "---",
+        "",
+        "# Workflow",
+        "",
+        f"- Created by: `{contract.created_by}`",
+        f"- Reviewer (architecture review): `{contract.reviewer}`",
+        f"- Implementer: `{contract.implementer}`",
+        f"- Currently with: `{contract.assigned_to}`",
+        f"- Handed off to: `{contract.handoff_to}`",
+        f"- Created at: `{contract.created_at}`",
+        f"- Updated at: `{contract.updated_at}`",
+        "",
+        "---",
+        "",
+        "# Title",
+        "",
+        contract.title,
+        "",
+        "---",
+        "",
+        "# Purpose",
+        "",
+        contract.purpose or "_Not filled in._",
+        "",
+        "---",
+        "",
+        "# Intent",
+        "",
+        contract.intent or "_Not filled in._",
+        "",
+        "---",
+        "",
+        "# Current State",
+        "",
+        contract.current_state or "_Not filled in._",
+        "",
+        "---",
+        "",
+        "# Inputs",
+        "",
+        contract.inputs or "_Not filled in._",
+        "",
+        "---",
+        "",
+        "# Outputs",
+        "",
+        contract.outputs or "_Not filled in._",
+        "",
+        "---",
+        "",
+        "# Functional Requirements",
         "",
     ]
 
     for point in contract.points:
         lines.extend(
             [
-                f"### Bod {point.number}",
+                f"## Point {point.number}",
                 "",
-                f"**Zadání:** {point.assignment}",
+                f"SHALL: {point.assignment}",
                 "",
-                "**Akceptační kritéria:**",
+                "Acceptance criteria:",
             ]
         )
         if point.acceptance_criteria:
             lines.extend(f"- {item}" for item in point.acceptance_criteria)
         else:
-            lines.append("- Není výslovně uvedeno; výsledek musí odpovídat zadání bodu.")
+            lines.append("- Not explicitly stated; the result must match the point's assignment.")
 
         lines.extend(
             [
                 "",
-                f"**Stav bodu:** `{point.status}`",
+                f"> Status: {point.status}",
                 "",
-                "**Poznámka programátora:**",
+                "Programmer note:",
                 "",
-                point.programmer_note or "_Čeká na implementaci._",
+                point.programmer_note or "_Awaiting implementation._",
                 "",
             ]
         )
         if point.programmer_files:
-            lines.append("**Dotčené soubory:**")
+            lines.append("Files touched:")
             lines.extend(f"- `{item}`" for item in point.programmer_files)
             lines.append("")
         if point.programmer_tests:
-            lines.append("**Testy:**")
+            lines.append("Tests:")
             lines.extend(f"- {item}" for item in point.programmer_tests)
             lines.append("")
         lines.extend(
             [
-                "**Review architekta:**",
+                "Architect's implementation review for this point:",
                 "",
-                point.architect_review or "_Čeká na review._",
+                point.architect_review or "_Awaiting review._",
                 "",
             ]
         )
 
     lines.extend(
         [
-            "## Souhrn programátora",
+            "---",
             "",
-            contract.programmer_summary or "_Čeká na implementaci._",
+            "# Out of Scope",
             "",
-            "## Souhrn architekta",
+            contract.out_of_scope or "_Not filled in._",
             "",
-            contract.architect_summary or "_Čeká na review._",
+            "---",
+            "",
+            "# Acceptance Criteria",
+            "",
+            "Acceptance criteria are listed per point in the Functional "
+            "Requirements section.",
+            "",
+            "---",
+            "",
+            "# Architecture Review",
+            "",
+        ]
+    )
+    if contract.architecture_review_rounds:
+        for round_data in contract.architecture_review_rounds:
+            lines.extend(
+                [
+                    f"### Round {round_data['round']} — {round_data['date']} — "
+                    f"Verdict: {round_data['verdict']}",
+                    "",
+                    round_data["findings"],
+                    "",
+                ]
+            )
+    else:
+        lines.extend(["_Awaiting architecture review._", ""])
+
+    lines.extend(
+        [
+            "---",
+            "",
+            "# Future Evolution",
+            "",
+            contract.future_evolution or "_Not filled in._",
+            "",
+            "---",
+            "",
+            "# Completion Notes",
+            "",
+            contract.completion_notes or "_Awaiting implementation._",
+            "",
+            "---",
+            "",
+            "# Implementation Review",
+            "",
+        ]
+    )
+    if contract.implementation_review_rounds:
+        for round_data in contract.implementation_review_rounds:
+            lines.extend(
+                [
+                    f"### Round {round_data['round']} — {round_data['date']} — "
+                    f"Verdict: {round_data['verdict']}",
+                    "",
+                    round_data["summary"],
+                    "",
+                ]
+            )
+    else:
+        lines.extend(["_Awaiting implementation review._", ""])
+
+    lines.extend(
+        [
+            "---",
+            "",
+            "# Lessons Learned",
+            "",
+            contract.lessons_learned or "_Not filled in._",
+            "",
+            "---",
             "",
             "<!-- CONTRACT-META",
             meta,
@@ -447,14 +749,14 @@ def render_contract(contract: Contract) -> str:
 def parse_contract(content: str) -> Contract:
     match = META_RE.search(content)
     if not match:
-        raise ValueError("Soubor neobsahuje CONTRACT-META.")
+        raise ValueError("File does not contain CONTRACT-META.")
     data = json.loads(match.group(1))
     data["points"] = [ContractPoint(**item) for item in data["points"]]
     return Contract(**data)
 
 
 def parse_json_response(text: str) -> dict[str, Any]:
-    """Načte JSON z čisté odpovědi nebo z ```json ... ``` bloku."""
+    """Parse JSON from a plain response or from a ```json ... ``` block."""
     stripped = text.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", stripped, re.DOTALL)
     candidate = fenced.group(1) if fenced else stripped
@@ -462,10 +764,10 @@ def parse_json_response(text: str) -> dict[str, Any]:
         value = json.loads(candidate)
     except json.JSONDecodeError as error:
         raise ValueError(
-            "Agent nevrátil platný JSON. Odpověď nebyla zapsána do kontraktu."
+            "The agent did not return valid JSON. The response was not written to the contract."
         ) from error
     if not isinstance(value, dict):
-        raise ValueError("Kořen odpovědi agenta musí být JSON objekt.")
+        raise ValueError("The root of the agent's response must be a JSON object.")
     return value
 
 

@@ -1,31 +1,31 @@
 from __future__ import annotations
 
 from agent import AgentConfig
-from agent_profile import vytvor_agenta
+from agent_profile import create_agent
 
 
 def main() -> None:
-    config = AgentConfig.nacti()
+    config = AgentConfig.load()
 
-    with vytvor_agenta(
+    with create_agent(
         "architect",
         config=config,
     ) as architect:
-        print("Architect je připraven.")
-        print("Ukončení: /exit")
-        print("Nový řádek odešlete klávesou Enter.\n")
+        print("Architect is ready.")
+        print("Exit: /exit")
+        print("Press Enter to send a new line.\n")
 
         while True:
             try:
-                dotaz = input("Vy: ").strip()
+                question = input("You: ").strip()
             except (EOFError, KeyboardInterrupt):
-                print("\nUkončuji.")
+                print("\nExiting.")
                 break
 
-            if not dotaz:
+            if not question:
                 continue
 
-            if dotaz.lower() in {
+            if question.lower() in {
                 "/exit",
                 "/quit",
                 "exit",
@@ -34,12 +34,12 @@ def main() -> None:
                 break
 
             try:
-                odpoved = architect.poloz_dotaz(dotaz)
-            except Exception as chyba:
-                print(f"\nChyba: {chyba}\n")
+                answer = architect.ask(question)
+            except Exception as error:
+                print(f"\nError: {error}\n")
                 continue
 
-            print(f"\nArchitect:\n{odpoved}\n")
+            print(f"\nArchitect:\n{answer}\n")
 
 
 if __name__ == "__main__":

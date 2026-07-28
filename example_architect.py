@@ -1,15 +1,15 @@
 from agent import AgentConfig
-from agent_profile import vytvor_agenta
+from agent_profile import create_agent
 
 
 def main() -> None:
-    config = AgentConfig.nacti()
-    with vytvor_agenta("architect", config=config) as architect:
-        odpoved = architect.spust_prikaz(
+    config = AgentConfig.load()
+    with create_agent("architect", config=config) as architect:
+        answer = architect.run_command(
             "analyze_architecture",
-            task="Prověř oddělení vytvor_vlakno() a vytvor_agenta().",
+            task="Review the separation between create_thread() and create_agent().",
         )
-        print(odpoved)
+        print(answer)
 
 
 if __name__ == "__main__":
