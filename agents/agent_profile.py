@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from agent import (
+from .agent import (
     PERMISSION_PROFILES,
     AgentConfig,
     AgentThread,

@@ -16,7 +16,10 @@ from dotenv import load_dotenv
 from openai_codex import ApprovalMode, Codex, Sandbox
 
 
-WORKSPACE = Path(__file__).parent.resolve()
+# This module lives at <project_root>/agents/agent.py, so the project root
+# is one level up from this file — not this file's own directory (see
+# ADR-021).
+WORKSPACE = Path(__file__).parent.parent.resolve()
 
 PROVIDERS = ("codex", "claude")
 CODEX_REASONING = ("low", "medium", "high")

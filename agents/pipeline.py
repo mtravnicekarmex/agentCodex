@@ -1,142 +1,10 @@
 from __future__ import annotations
 
-from contextlib import ExitStack
 from pathlib import Path
 
-from agent import AgentConfig, WORKSPACE
-from agent_profile import Agent, create_agent
-from contract_workflow import Contract, ContractStore, MemoryUpdate, parse_json_response
-from git_ops import commit_and_push
-
-
-HELP = """
-Commands:
-  /new <topic>       Architect creates a new contract (DRAFT). Runs
-                      automatically from there: reviewer's architecture
-                      review, then (only if ACCEPTED) the programmer's
-                      implementation and the architect's implementation
-                      review. Stops and reports back once it returns to
-                      the architect (APPROVED, CHANGES_REQUESTED,
-                      ARCHITECTURE_CHANGES_REQUESTED, or REJECTED).
-  /revise <n> <topic> Architect rewrites the requirements of a contract
-                      returned by the reviewer (ARCHITECTURE_CHANGES_REQUESTED),
-                      resubmits it for review, and continues automatically
-                      the same way /new does.
-  /work [n]         Manual override: programmer picks up contract <n> (or
-                      the next ready one) and implements it. Not needed in
-                      the normal flow — /new and /revise already chain this.
-  /review [n]       Manual override: architect runs implementation review
-                      on contract <n> (or the next ready one). Not needed
-                      in the normal flow.
-  /commit <n>       After discussing implementation review's result with
-                      the architect and agreeing it is sufficient, commits
-                      and pushes contract <n> (must be APPROVED).
-  /status           Shows all contracts and their status.
-  /inbox <agent>    Shows an agent's inbox (architect/reviewer/programmer/owner).
-  /chat <agent>     Switches the plain chat to architect/reviewer/programmer.
-  /help             Shows this help.
-  /exit             Exits the console.
-""".strip()
-
-INBOX_AGENTS = ("architect", "reviewer", "programmer", "owner")
-
-
-def main(project_root: Path = WORKSPACE) -> None:
-    project_root = project_root.resolve()
-    config = AgentConfig.load(project_root / ".env")
-    store = ContractStore(project_root)
-
-    with ExitStack() as stack:
-        architect = stack.enter_context(
-            create_agent("architect", config=config, project_root=project_root)
-        )
-        reviewer = stack.enter_context(
-            create_agent("reviewer", config=config, project_root=project_root)
-        )
-        programmer = stack.enter_context(
-            create_agent("programmer", config=config, project_root=project_root)
-        )
-        agents = {"architect": architect, "reviewer": reviewer, "programmer": programmer}
-        active = architect
-
-        print("Agent console is ready.")
-        print(HELP)
-
-        while True:
-            try:
-                raw = input(f"\n[{active.name}] You: ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\nExiting.")
-                break
-
-            if not raw:
-                continue
-            if raw == "/exit":
-                break
-            if raw == "/help":
-                print(HELP)
-                continue
-            if raw == "/status":
-                print_status(store)
-                continue
-            if raw.startswith("/inbox "):
-                name = raw.split(maxsplit=1)[1].strip()
-                if name not in INBOX_AGENTS:
-                    print("Unknown agent. Use architect, reviewer, programmer, or owner.")
-                    continue
-                show_inbox(project_root, name)
-                continue
-            if raw.startswith("/chat "):
-                name = raw.split(maxsplit=1)[1].strip()
-                if name not in agents:
-                    print("Unknown agent. Use architect, reviewer, or programmer.")
-                    continue
-                active = agents[name]
-                print(f"Active chat: {name}")
-                continue
-            if raw.startswith("/new "):
-                try:
-                    create_contract(
-                        architect, reviewer, programmer, store, raw.split(maxsplit=1)[1]
-                    )
-                except Exception as error:
-                    print(f"\nError while creating the contract: {error}")
-                continue
-            if raw.startswith("/revise "):
-                try:
-                    _, rest = raw.split(maxsplit=1)
-                    number_str, task = rest.split(maxsplit=1)
-                    revise_contract(
-                        architect, reviewer, programmer, store, int(number_str), task
-                    )
-                except Exception as error:
-                    print(f"\nError while revising the contract: {error}")
-                continue
-            if raw == "/work" or raw.startswith("/work "):
-                try:
-                    number = int(raw.split(maxsplit=1)[1]) if " " in raw else None
-                    implement_next(programmer, store, number=number)
-                except Exception as error:
-                    print(f"\nError while implementing the contract: {error}")
-                continue
-            if raw == "/review" or raw.startswith("/review "):
-                try:
-                    number = int(raw.split(maxsplit=1)[1]) if " " in raw else None
-                    review_next(architect, store, number=number)
-                except Exception as error:
-                    print(f"\nError while reviewing the contract: {error}")
-                continue
-            if raw.startswith("/commit "):
-                try:
-                    commit_approved_contract(store, int(raw.split(maxsplit=1)[1]))
-                except Exception as error:
-                    print(f"\nError while committing: {error}")
-                continue
-
-            try:
-                print(f"\n{active.display_name}:\n{active.ask(raw)}")
-            except Exception as error:
-                print(f"\nAgent error: {error}")
+from .agent_profile import Agent
+from .contract_workflow import Contract, ContractStore, MemoryUpdate, parse_json_response
+from .git_ops import commit_and_push
 
 
 def create_contract(
@@ -351,5 +219,36 @@ def show_inbox(project_root: Path, agent: str) -> None:
     print(path.read_text(encoding="utf-8"))
 
 
-if __name__ == "__main__":
-    main()
+def status_text(store: ContractStore) -> str:
+    """Plain-text contract queue, for grounding the architect's opening
+    greeting in real data instead of a guess (see ADR-021)."""
+    contracts = store.list_contracts()
+    if not contracts:
+        return "No contracts yet."
+    return "\n".join(
+        f"IMPLEMENTATION_CONTRACT_{c.number:04d}: {c.status} "
+        f"(handed off to {c.handoff_to}) — {c.title}"
+        for c in contracts
+    )
+
+
+def opening_briefing(store: ContractStore, project_root: Path) -> str:
+    """Builds the first message sent to the architect when a session starts.
+
+    Grounds the greeting in the actual contract queue and the architect's
+    own inbox, rather than letting the model guess what might be pending
+    (see PRINCIPLES.md P4/P6 and ADR-021).
+    """
+    inbox_path = project_root / "agents" / "architect" / "INBOX.md"
+    inbox_text = (
+        inbox_path.read_text(encoding="utf-8").strip()
+        if inbox_path.is_file()
+        else ""
+    )
+    return (
+        "The owner just started a new session with you. Greet them, briefly "
+        "mention anything in the contract queue or your inbox that needs "
+        "attention, and ask what is on the agenda today.\n\n"
+        f"Current contract queue:\n{status_text(store)}\n\n"
+        f"Your inbox:\n{inbox_text or '(empty)'}"
+    )

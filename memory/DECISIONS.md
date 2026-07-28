@@ -534,3 +534,86 @@ connected the `bod nula` local folder for direct access, same as
   with `rm`/`mv`) — harmless to read-only git commands, but needs manual
   deletion before the owner's next local `git add`/`commit` in either
   folder.
+- Confirmed explicitly: this connected `bod nula` folder/repo stays a
+  clean template forever. The first project (and every subsequent one) is
+  started from a fresh, separate clone of `bod-nula` into its own new
+  folder/repo — never by developing directly inside this connected copy.
+- Refresh procedure for future updates (manual, triggered by the owner,
+  not automated — no tooling built for this yet, per P15, until the
+  manual process actually proves painful): (1) confirm `agentCodex` is
+  clean and its tests pass; (2) copy the framework/governance layer from
+  `agentCodex` into the connected `bod nula` folder, excluding `.git/`,
+  `.venv/`, cache directories, `.idea/`, `.env`, and `project/` (which
+  stays the empty placeholder in `bod-nula` regardless of what
+  `agentCodex`'s own `project/` contains by then); (3) manually reapply
+  `bod-nula`'s two deliberate differences from `agentCodex` (the README
+  title and this ADR's snapshot-role note), since the copy would otherwise
+  overwrite them; (4) the owner reviews the diff and commits/pushes
+  `bod-nula` themselves, same as today.
+
+## ADR-021: Root directory decluttered to one entry point; framework code moved into agents/
+
+Per the owner's direction: the repository root should hold exactly one
+`.py` file — the one used to open a window onto the architect — with
+everything else the framework needs living under `agents/`. The owner
+also no longer wants a multi-agent console; going forward they only ever
+talk to the architect directly, with the reviewer and programmer working
+purely as internal pipeline agents.
+
+- Moved into a new `agents` Python package (new `agents/__init__.py`,
+  alongside the existing per-role profile directories
+  `agents/architect/`, `agents/reviewer/`, `agents/programmer/`, which are
+  data directories, not Python modules, and coexist without conflict):
+  `agents/agent.py` (from root `agent.py`), `agents/agent_profile.py`
+  (from root `agent_profile.py`, import updated to `from .agent import
+  ...`), `agents/contract_workflow.py` (from root `contract_workflow.py`,
+  unchanged otherwise), `agents/git_ops.py` (from root `git_ops.py`,
+  unchanged).
+- Fixed a real bug the move would otherwise have introduced:
+  `agent.py`'s `WORKSPACE = Path(__file__).parent.resolve()` assumed the
+  file lives at the repository root. Moved one level down into
+  `agents/agent.py`, that same expression would have resolved to
+  `agents/` instead of the actual project root — silently breaking every
+  default (`.env` lookup, agent profile directories, provider `cwd`).
+  Fixed to `Path(__file__).parent.parent.resolve()`.
+- New `agents/pipeline.py` absorbs `agent_console.py`'s orchestration
+  logic verbatim (`create_contract`, `revise_contract`,
+  `continue_pipeline`, `run_architecture_review`, `implement_next`,
+  `review_next`, `commit_approved_contract`, `print_status`,
+  `show_inbox`), plus two new functions: `status_text()` and
+  `opening_briefing()`, used to ground the new entry point's opening
+  greeting in the real contract queue and the architect's real inbox
+  content, rather than a static or guessed greeting (see below).
+- `agent_console.py` (multi-agent console: `/chat <agent>` switching,
+  direct chat with reviewer/programmer) is retired — no longer part of
+  the intended workflow. `example_architect.py` (a pre-pipeline demo
+  script) is removed — fully superseded by the real pipeline and the new
+  entry point, with no remaining purpose.
+- The single root entry point, `chat_architect.py`, is rewritten: creates
+  all three agents internally (architect, reviewer, programmer — the
+  latter two never exposed for direct chat), sends `opening_briefing()`
+  to the architect as its first message so its opening greeting reflects
+  real state ("what's on the agenda today" grounded in the actual
+  contract queue and inbox, not a guess — see `PRINCIPLES.md` P4/P6),
+  then a plain input loop: free text goes straight to the architect;
+  `/new`, `/revise`, `/work`, `/review`, `/commit`, `/status`, `/inbox`,
+  `/help`, `/exit` remain available alongside the conversation, calling
+  into `agents/pipeline.py`.
+- Tests updated to the new import paths
+  (`agents.agent`, `agents.agent_profile`, `agents.contract_workflow`,
+  `agents.git_ops`); `tests/test_agent_console.py`'s tests moved to new
+  `tests/test_pipeline.py` (importing `agents.pipeline`), plus one new
+  test for `opening_briefing()`. Verified with `py_compile` and a full
+  pytest run (24/24 passing), including confirming
+  `agents.agent.WORKSPACE` resolves to the true project root after the
+  move.
+- The connected-folder sandbox cannot delete files (a known limitation —
+  see the ADR-013-era note on `git rm`/`mv`). The retired root files
+  (`agent.py`, `agent_profile.py`, `contract_workflow.py`, `git_ops.py`,
+  `agent_console.py`, `example_architect.py`, `tests/test_agent_console.py`)
+  were overwritten with a short redirect note each, pointing here and
+  asking the owner to `git rm` them manually.
+- This is `agentCodex`-only for now, per the owner's own framing
+  ("agentCodex jako vývojové repo") — `bod-nula` is refreshed from this
+  state later, following the ADR-020 refresh procedure, once the owner
+  judges the project ready to deploy.

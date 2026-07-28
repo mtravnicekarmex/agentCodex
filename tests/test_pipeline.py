@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import agent_console
-from contract_workflow import ContractStore
+import agents.pipeline as pipeline
+from agents.contract_workflow import ContractStore
 
 
 class ScriptedAgent:
@@ -36,7 +36,7 @@ class FakeGit:
 @pytest.fixture(autouse=True)
 def fake_git(monkeypatch: pytest.MonkeyPatch) -> FakeGit:
     fake = FakeGit()
-    monkeypatch.setattr(agent_console, "commit_and_push", fake)
+    monkeypatch.setattr(pipeline, "commit_and_push", fake)
     return fake
 
 
@@ -108,7 +108,7 @@ def test_create_contract_chains_through_to_implementation_review(
         }
     )
 
-    agent_console.create_contract(architect, reviewer, programmer, store, "Add X")
+    pipeline.create_contract(architect, reviewer, programmer, store, "Add X")
 
     contract = store.load(1)
     assert contract.status == "APPROVED"
@@ -137,7 +137,7 @@ def test_commit_approved_contract_commits_with_implemented_suffix(
         reviews=[{"point": 1, "status": "APPROVED", "review": "ok"}],
     )
 
-    agent_console.commit_approved_contract(store, 1)
+    pipeline.commit_approved_contract(store, 1)
 
     assert fake_git.calls == [(tmp_path.resolve(), "CONTRACT_0001 - IMPLEMENTED")]
 
@@ -148,7 +148,7 @@ def test_commit_approved_contract_refuses_when_not_approved(
     store = create_store(tmp_path)
     store.create_contract("Test", [{"assignment": "Point 1"}])
 
-    agent_console.commit_approved_contract(store, 1)
+    pipeline.commit_approved_contract(store, 1)
 
     assert fake_git.calls == []
 
@@ -180,7 +180,7 @@ def test_create_contract_stops_when_changes_requested_at_architecture_review(
     )
     programmer = ScriptedAgent({})
 
-    agent_console.create_contract(architect, reviewer, programmer, store, "Add X")
+    pipeline.create_contract(architect, reviewer, programmer, store, "Add X")
 
     contract = store.load(1)
     assert contract.status == "ARCHITECTURE_CHANGES_REQUESTED"
@@ -243,9 +243,19 @@ def test_create_contract_stops_after_changes_requested_implementation_review(
         }
     )
 
-    agent_console.create_contract(architect, reviewer, programmer, store, "Add X")
+    pipeline.create_contract(architect, reviewer, programmer, store, "Add X")
 
     contract = store.load(1)
     assert contract.status == "CHANGES_REQUESTED"
     # The chain stops here — a second automatic programmer round must not run.
     assert programmer.calls == ["implement_contract"]
+
+
+def test_opening_briefing_includes_status_and_inbox(tmp_path: Path) -> None:
+    store = create_store(tmp_path)
+    store.create_contract("Test", [{"assignment": "Point 1"}])
+
+    briefing = pipeline.opening_briefing(store, tmp_path)
+
+    assert "IMPLEMENTATION_CONTRACT_0001" in briefing
+    assert "agenda" in briefing.lower()

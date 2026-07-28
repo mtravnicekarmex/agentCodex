@@ -3,7 +3,7 @@
 - `create_contract` — drafts a new numbered contract (created in status
   DRAFT, goes straight to the `reviewer` agent for architecture review).
   Also used to revise a contract after `CHANGES_REQUESTED` (see
-  `agent_console.py::revise_contract`).
+  `agents/pipeline.py::revise_contract`).
 - `review_contract` — implementation review AFTER implementation; checks
   every point against its acceptance criteria and proposes memory entries.
 - `analyze_architecture` — runs an architectural analysis of a given part

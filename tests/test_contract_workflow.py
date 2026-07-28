@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from contract_workflow import ContractStore, MemoryUpdate, parse_json_response
+from agents.contract_workflow import ContractStore, MemoryUpdate, parse_json_response
 
 
 def create_store(tmp_path: Path) -> ContractStore:

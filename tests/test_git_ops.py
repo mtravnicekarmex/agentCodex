@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from git_ops import commit_and_push
+from agents.git_ops import commit_and_push
 
 
 def init_repo_with_remote(tmp_path: Path) -> Path:

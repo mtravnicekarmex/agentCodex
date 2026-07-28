@@ -1,5 +1,13 @@
 # Update: contract workflow
 
+Historical note (see `memory/DECISIONS.md`, ADR-021): the files below
+(`contract_workflow.py`, `agent_console.py`) have since moved into the
+`agents/` package (`agents/contract_workflow.py`, `agents/pipeline.py`);
+`agent_console.py` itself was retired in favor of the single-window
+`chat_architect.py` at the repository root. This note is kept as a
+historical record of the original delivery, not as current instructions —
+see `README.md` for how to actually run the project today.
+
 This package adds:
 
 - `contract_workflow.py` — the contract model, storage, handoff, and review,

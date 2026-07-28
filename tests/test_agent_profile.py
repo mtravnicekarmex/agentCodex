@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import agent_profile
-from agent import AgentConfig
-from agent_profile import AgentProfile, build_agent_instructions, create_agent
+import agents.agent_profile as agent_profile
+from agents.agent import AgentConfig
+from agents.agent_profile import AgentProfile, build_agent_instructions, create_agent
 
 
 def create_profile(tmp_path: Path) -> Path:

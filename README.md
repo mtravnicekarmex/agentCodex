@@ -20,14 +20,14 @@ pip install -r requirements.txt
 ## Login
 
 ```powershell
-python agent.py
+python -m agents.agent
 ```
 
 ## Profiled agent
 
 ```python
-from agent import AgentConfig
-from agent_profile import create_agent
+from agents.agent import AgentConfig
+from agents.agent_profile import create_agent
 
 config = AgentConfig.load()
 
@@ -35,15 +35,24 @@ with create_agent("architect", config=config) as architect:
     print(architect.ask("Review the design of the new layer."))
 ```
 
-## Interactive workflow architect → reviewer → programmer → architect
+## Talking to the architect
+
+The only entry point at the repository root is `chat_architect.py` — a
+single window onto the architect. There is no multi-agent console; the
+reviewer and programmer are created internally to run the pipeline, but
+you never chat with them directly (see ADR-021).
 
 Run:
 
 ```powershell
-python agent_console.py
+python chat_architect.py
 ```
 
-Most important commands:
+On start, the architect is briefed on the real contract queue and its own
+inbox and greets you with that context — e.g. asking what is on the agenda
+today — instead of a blind, ungrounded greeting. From there, plain text
+goes straight to the architect; the following commands are also available
+alongside the conversation:
 
 ```text
 /new <topic>       architect creates IMPLEMENTATION_CONTRACT_NNNN.md (DRAFT);
@@ -62,7 +71,9 @@ Most important commands:
                   the architect and agreeing it is sufficient, commits and
                   pushes contract <n> (must be APPROVED)
 /status           shows the queue and handoffs
-/inbox <agent>
+/inbox            shows the architect's inbox
+/help             shows this list again
+/exit             exits
 ```
 
 ### Lifecycle

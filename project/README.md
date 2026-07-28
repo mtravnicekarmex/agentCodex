@@ -4,10 +4,9 @@
 
 Holds the actual application code for the project this clone of agentCodex
 was set up for — kept separate from the agentic framework/governance layer
-that lives at the repository root (`agent.py`, `agent_profile.py`,
-`contract_workflow.py`, `agents/`, `memory/`, `contracts/`, `AGENTS.md`,
-`PRINCIPLES.md`). Every implementation contract's actual code changes land
-here.
+(`agents/` package, `memory/`, `contracts/`, `AGENTS.md`, `PRINCIPLES.md`,
+and the single root entry point `chat_architect.py`). Every implementation
+contract's actual code changes land here.
 
 ## Current capabilities (v0.1)
 
