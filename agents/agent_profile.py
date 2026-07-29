@@ -300,9 +300,14 @@ def build_agent_instructions(profile: AgentProfile) -> str:
         f"- Provider: `{profile.config.provider}`\n"
         f"- Permissions: `{profile.config.permission_profile}`\n"
         f"- Project root: `{profile.project_root}`\n\n"
-        "Work across the whole project. Do not limit yourself to your own "
-        "subfolder under `agents/`. A technical sandbox restriction always "
-        "takes precedence over a text instruction."
+        "You may read across the whole project. Do not limit your reading to "
+        "your own subfolder under `agents/`. Writing is scoped: once "
+        "`project/` holds real code, implement contract work there by "
+        "default. Touching the framework layer (`agents/*.py`, "
+        "`chat_architect.py`) or a governance `.md` file (`AGENTS.md`, "
+        "`PRINCIPLES.md`, `ROLE.md`, `COMMANDS.md`) is in scope only when "
+        "the contract explicitly calls for it. A technical sandbox "
+        "restriction always takes precedence over a text instruction."
     )
     return "\n\n".join(parts)
 

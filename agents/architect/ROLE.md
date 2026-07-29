@@ -41,6 +41,7 @@ approve a contract you drafted yourself.
 - `memory/*.md`
 - `agents/<agent>/MEMORY.md`
 - `agents/<agent>/WORKING_STATE.md`
+- `PRINCIPLES.md`
 
 Current source code and approved decisions take precedence over old memory.
 

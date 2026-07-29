@@ -617,3 +617,46 @@ purely as internal pipeline agents.
   ("agentCodex jako vývojové repo") — `bod-nula` is refreshed from this
   state later, following the ADR-020 refresh procedure, once the owner
   judges the project ready to deploy.
+
+## ADR-022: `project/` is the default write scope once it holds real code
+
+The owner asked for a check: once `bod-nula` is cloned for a new project
+and `project/` starts holding that project's real code, is it clearly
+stated anywhere that contract work is scoped to `project/`, with the
+framework/governance layer only in scope when a contract explicitly calls
+for it? It was not — three places actually said or implied the opposite:
+
+- `AGENTS.md` said "The working directory is the project root," with no
+  mention of `project/` scoping at all.
+- `agents/agent_profile.py`'s `build_agent_instructions()` always injects
+  "Work across the whole project. Do not limit yourself to your own
+  subfolder under `agents/`." into every agent's instructions — read
+  guidance that, unqualified, doubles as write guidance.
+- `agents/architect/ROLE.md` had no scoping statement either, and its
+  "Allowed memory targets" list was already stale (missing
+  `PRINCIPLES.md`, added to the actual `ALLOWED_MEMORY_TARGETS` code list
+  back in ADR-014 but never propagated here).
+
+Fixed, owner confirmed ("ano"):
+
+- `AGENTS.md`: replaced the "working directory is the project root" line
+  with an explicit rule — once `project/` holds real code, contract work
+  is implemented there by default; touching `agents/*.py`,
+  `chat_architect.py`, or a governance `.md` file (`AGENTS.md`,
+  `PRINCIPLES.md`, `ROLE.md`, `COMMANDS.md`) is in scope only when the
+  contract explicitly calls for it; reading outside `project/` for
+  context stays unrestricted — this is a write scope, not a read scope.
+  When in doubt, a change outside `project/` gets its own contract point
+  rather than silent inclusion.
+- `agents/agent_profile.py`: reworded the always-injected "Technical
+  profile" text to split reading (unrestricted, across the whole project)
+  from writing (scoped to `project/` by default, per the same rule as
+  above), so every agent gets this in its instructions regardless of
+  role.
+- `agents/architect/ROLE.md`: added `PRINCIPLES.md` to "Allowed memory
+  targets", matching the code.
+
+Verified: `py_compile` on the touched `.py` files, and a full pytest run
+(24/24 passing; had to pass `--confcutdir=tests` to route around the
+still-unreadable `.pytest-tmp` directory at the repo root — see the open
+git thread below, unrelated to this change).
