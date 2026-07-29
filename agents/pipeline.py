@@ -222,14 +222,36 @@ def print_status(store: ContractStore) -> None:
         )
 
 
-def show_inbox(project_root: Path, agent: str) -> None:
+def inbox_text(project_root: Path, agent: str) -> str:
+    """An agent's (or the owner's) inbox content, or an empty string if
+    there is none — the shared building block behind both `show_inbox()`
+    (CLI) and the read-only dashboard (see ADR-030)."""
     path = project_root / "agents" / agent / "INBOX.md"
     if agent == "owner":
         path = project_root / "contracts" / "OWNER_INBOX.md"
-    if not path.is_file():
-        print(f"Inbox {agent!r} is empty.")
-        return
-    print(path.read_text(encoding="utf-8"))
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def show_inbox(project_root: Path, agent: str) -> None:
+    text = inbox_text(project_root, agent)
+    print(text if text else f"Inbox {agent!r} is empty.")
+
+
+def role_snapshot(store: ContractStore) -> dict[str, list[Contract]]:
+    """Read-only summary of what each pipeline role currently has waiting
+    on it, derived purely from contract state (see ADR-030).
+
+    There is no persisted conversation transcript anywhere in this
+    project today — only the final structured result of a `run_command()`
+    call ends up saved, inside the contract file itself. So this reflects
+    the last known state (whatever was last written to disk), not a live,
+    turn-by-turn feed of what an agent is doing right this second.
+    """
+    return {
+        "reviewer": store.list_contracts(assigned_to="reviewer"),
+        "architect": store.list_contracts(assigned_to="architect"),
+        "programmer": store.list_contracts(assigned_to="programmer"),
+    }
 
 
 def status_text(store: ContractStore) -> str:

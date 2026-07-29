@@ -1013,3 +1013,68 @@ code edits, and the same `main.py` rename, plus their own five old-root
 files retired the same way. "SMS pro brány" needs `main.py` (not
 `chat_architect.py`) run from now on, and its `.venv`/IDE run
 configuration updated accordingly by the owner.
+
+## ADR-030: Read-only Streamlit status dashboard
+
+The owner proposed a frontend where each of the three pipeline roles gets
+its own visible area showing what it is currently working on, floated
+giving the `programmer` a "ask for clarification when unsure" behavior
+with a way to answer it directly in its own window. Discussed before
+building anything (P11 — validate on the smallest real case first):
+
+- Whether this replaces the architect-only conversational entry point
+  from ADR-021, or is a separate, optional, read-only view running
+  alongside `main.py` — owner confirmed: for now, an optional add-on; the
+  live-chat-with-any-agent idea is explicitly deferred, not decided
+  against.
+- Where the interactive "ask for clarification" idea would actually need
+  to land: `programmer` today runs as a single blocking `run_command()`
+  call and returns one final JSON result — pausing mid-task to ask a
+  question would need a new contract status (something like "waiting on
+  the owner") and a way to resume afterward. Real scope, deliberately not
+  built yet.
+- What a *read-only* first version can show at all: no agent's
+  conversation is logged anywhere today — only the final structured
+  result of a `run_command()` call is ever persisted, inside the contract
+  file itself. So "what is X currently doing" can only mean "the last
+  thing X wrote to disk," not a live, turn-by-turn feed. Owner confirmed
+  this is fine for a first version; logging every `ask()`/`run_command()`
+  call is a separate, later decision, not a prerequisite.
+- Where the code should live: root holds exactly one `.py` file per
+  ADR-029 (`main.py`). Since this first version has no chat window and
+  does not run or drive the pipeline, it did not need to become a second
+  root entry point — `agents/dashboard.py`, run via `streamlit run
+  agents/dashboard.py`, keeps the root-cleanliness rule intact. If a live
+  chat window is built later, this placement is worth revisiting then,
+  not now.
+
+Built: `agents/pipeline.py` gained two new pure, testable functions —
+`inbox_text()` (extracted from `show_inbox()`, which now uses it too, so
+the same logic isn't duplicated) and `role_snapshot(store)` (returns
+`{"architect": [...], "reviewer": [...], "programmer": [...]}`, each a
+list of `Contract`s currently handed off to that role, via the existing
+`list_contracts(assigned_to=...)` — no new query logic, just grouping
+what already existed by role). `agents/dashboard.py` is a new Streamlit
+script: a contract-queue table, then one column per role showing its
+contracts (status, handoff, and the latest available note — the last
+implementation review summary, or architecture review findings, or
+programmer point note, in that order of recency) and that role's inbox.
+A "Refresh" button reruns the script; no background thread, no polling,
+no new dependency on the framework's own agent code beyond what
+`main.py` already imports. Added `streamlit` to `requirements.txt`.
+
+The script inserts the repository root onto `sys.path` itself before
+importing `agents.*`, since Streamlit executes it directly rather than as
+part of the `agents` package (same reasoning as project-level test
+`conftest.py` files needing to do the same for their own package).
+
+Added 6 new tests to `tests/test_pipeline.py` (`inbox_text` for a
+missing/present agent inbox and the owner inbox path;
+`role_snapshot` grouping correctly by current handoff, and returning
+empty lists for an empty queue). Full suite: 47/47 passing. Manually
+smoke-tested `streamlit run agents/dashboard.py` (headless) against both
+an empty contract queue and "SMS pro brány"'s real queue — starts and
+serves without a server-side exception in either case.
+
+Synced to `bod-nula` and "SMS pro brány" the same way as ADR-021 through
+ADR-029.

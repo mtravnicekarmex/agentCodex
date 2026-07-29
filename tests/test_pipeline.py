@@ -539,3 +539,46 @@ def test_dispatch_pipeline_action_resume_calls_resume_stuck_contract(
     )
 
     assert store.load(1).status == "APPROVED"
+
+
+def test_inbox_text_returns_empty_string_when_missing(tmp_path: Path) -> None:
+    assert pipeline.inbox_text(tmp_path, "architect") == ""
+
+
+def test_inbox_text_reads_agent_inbox(tmp_path: Path) -> None:
+    inbox = tmp_path / "agents" / "architect"
+    inbox.mkdir(parents=True)
+    (inbox / "INBOX.md").write_text("hello", encoding="utf-8")
+
+    assert pipeline.inbox_text(tmp_path, "architect") == "hello"
+
+
+def test_inbox_text_reads_owner_inbox_from_contracts_dir(tmp_path: Path) -> None:
+    contracts = tmp_path / "contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "OWNER_INBOX.md").write_text("owner note", encoding="utf-8")
+
+    assert pipeline.inbox_text(tmp_path, "owner") == "owner note"
+
+
+def test_role_snapshot_groups_contracts_by_current_handoff(tmp_path: Path) -> None:
+    store = create_store(tmp_path)
+    store.create_contract("Waiting on reviewer", [{"assignment": "Do X"}])
+    store.create_contract("Waiting on programmer", [{"assignment": "Do Y"}])
+    store.record_architecture_review(2, verdict="ACCEPTED", findings="fine")
+
+    snapshot = pipeline.role_snapshot(store)
+
+    assert [c.number for c in snapshot["reviewer"]] == [1]
+    assert [c.number for c in snapshot["programmer"]] == [2]
+    assert snapshot["architect"] == []
+
+
+def test_role_snapshot_empty_queue_returns_empty_lists_for_every_role(
+    tmp_path: Path,
+) -> None:
+    store = create_store(tmp_path)
+
+    snapshot = pipeline.role_snapshot(store)
+
+    assert snapshot == {"reviewer": [], "architect": [], "programmer": []}

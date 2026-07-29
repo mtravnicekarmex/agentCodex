@@ -2,3 +2,4 @@ openai-codex
 claude-agent-sdk
 python-dotenv
 pytest
+streamlit
