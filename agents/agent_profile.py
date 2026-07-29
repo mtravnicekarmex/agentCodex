@@ -51,7 +51,7 @@ class AgentProfile:
         self.commands_directory = self.directory / "commands"
         self.runtime_directory = self.directory / "runtime"
         self.thread_file = self.runtime_directory / "thread.json"
-        self.principles_file = self.project_root / "PRINCIPLES.md"
+        self.principles_file = self.project_root / "agents" / "PRINCIPLES.md"
         self.config = self._load_config()
 
     @staticmethod
@@ -304,9 +304,9 @@ def build_agent_instructions(profile: AgentProfile) -> str:
         "your own subfolder under `agents/`. Writing is scoped: once "
         "`project/` holds real code, implement contract work there by "
         "default. Touching the framework layer (`agents/*.py`, "
-        "`chat_architect.py`) or a governance `.md` file (`AGENTS.md`, "
-        "`PRINCIPLES.md`, `ROLE.md`, `COMMANDS.md`) is in scope only when "
-        "the contract explicitly calls for it. A technical sandbox "
+        "`main.py`) or a governance `.md` file (`agents/AGENTS.md`, "
+        "`agents/PRINCIPLES.md`, `ROLE.md`, `COMMANDS.md`) is in scope only "
+        "when the contract explicitly calls for it. A technical sandbox "
         "restriction always takes precedence over a text instruction."
     )
     return "\n\n".join(parts)

@@ -37,8 +37,8 @@ does not cover, the same way Tr5's own P19-P24 were each extracted from a
 specific incident, not from a review calendar.
 
 When that happens: the reviewing agent (architect, or reviewer for
-architecture review) may propose an entry to `PRINCIPLES.md` via
-`memory_updates` (allowed since `PRINCIPLES.md` is in
+architecture review) may propose an entry to `agents/PRINCIPLES.md` via
+`memory_updates` (allowed since `agents/PRINCIPLES.md` is in
 `ALLOWED_MEMORY_TARGETS` — see ADR-014), describing the conflict and which
 principle it concerns. This is appended, not a direct edit to the
 principle's own `Status` field — `append_memory()` only appends a
@@ -52,8 +52,8 @@ auto-generated.
 
 The full content of this file is loaded into every agent's instructions
 (see `agent_profile.py::build_agent_instructions`), the same way `ROLE.md` is
-— so it does not depend on whether a given provider's SDK loads `AGENTS.md`
-automatically.
+— so it does not depend on whether a given provider's SDK loads
+`agents/AGENTS.md` automatically.
 
 ## Principles
 
@@ -120,9 +120,9 @@ Source: Tr5 P5
 No decision about what should change is made from memory or assumption.
 The actual state of the relevant code and the public API is established
 first — by reading it — before any requirement, contract, or fix is
-proposed. (Operationally this is `AGENTS.md`'s "Read related files and the
-public API before changing code"; this entry is the underlying reason that
-rule exists, not a duplicate of it.)
+proposed. (Operationally this is `agents/AGENTS.md`'s "Read related files
+and the public API before changing code"; this entry is the underlying
+reason that rule exists, not a duplicate of it.)
 
 ### P8 — Every implementation begins with an explicit architectural intent.
 Status: Active
@@ -218,10 +218,10 @@ Source: Tr5 P12
 
 The full contract pipeline exists to protect structural, hard-to-reverse
 decisions. Small, reversible changes take the light path instead (see
-`AGENTS.md` "Light path for small fixes", ADR-006). A process that taxes
-every step, including trivial ones, eventually gets abandoned — and an
-abandoned process protects nothing. This is why the light path exists at
-all, not a workaround to the contract system but the other half of it.
+`agents/AGENTS.md` "Light path for small fixes", ADR-006). A process that
+taxes every step, including trivial ones, eventually gets abandoned — and
+an abandoned process protects nothing. This is why the light path exists
+at all, not a workaround to the contract system but the other half of it.
 
 ### P15 — Standards are extracted from a working system, not invented in advance.
 Status: Active

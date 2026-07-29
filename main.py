@@ -9,6 +9,8 @@ from agents.contract_workflow import ContractStore
 from agents.pipeline import (
     commit_approved_contract,
     create_contract,
+    dispatch_pipeline_action,
+    extract_pipeline_action,
     implement_next,
     opening_briefing,
     revise_contract,
@@ -19,7 +21,11 @@ from agents.pipeline import (
 
 
 HELP = """
-Talk to the architect directly — plain text goes straight to them.
+Talk to the architect directly — plain text goes straight to them. You do
+not need any of the commands below: when you and the architect reach a
+clear decision (draft a contract, revise one, ship an approved one), the
+architect triggers the real pipeline itself as part of the conversation
+(see ADR-025). The commands are still there as manual overrides.
 
 Commands available alongside the conversation:
   /new <topic>       drafts a new contract; the pipeline then runs on its
@@ -32,8 +38,8 @@ Commands available alongside the conversation:
                       the next ready one)
   /review [n]       manual override: architect runs implementation review
                       on contract <n> (or the next ready one)
-  /commit <n>       after agreeing the implementation is sufficient,
-                      commits and pushes contract <n> (must be APPROVED)
+  /commit <n>       manual override: commits and pushes contract <n>
+                      (must be APPROVED)
   /status           shows the contract queue
   /inbox            shows the architect's inbox
   /help             shows this help
@@ -125,9 +131,18 @@ def main(project_root: Path = WORKSPACE) -> None:
                 continue
 
             try:
-                print(f"\nArchitect:\n{architect.ask(raw)}\n")
+                reply = architect.ask(raw)
             except Exception as error:
                 print(f"\nError: {error}\n")
+                continue
+
+            visible, action = extract_pipeline_action(reply)
+            print(f"\nArchitect:\n{visible}\n")
+            if action is not None:
+                try:
+                    dispatch_pipeline_action(action, architect, reviewer, programmer, store)
+                except Exception as error:
+                    print(f"\nError while acting on the architect's request: {error}\n")
 
 
 if __name__ == "__main__":

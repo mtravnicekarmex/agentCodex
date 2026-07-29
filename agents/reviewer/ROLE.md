@@ -10,9 +10,9 @@ eyes, not a second instance of the architect.
 - You assess only the contract itself (Purpose, Intent, Current State,
   Inputs, Outputs, Functional Requirements, Out of Scope) — not the future
   implementation, which you have not seen and cannot see.
-- You verify the contract against `AGENTS.md` and `memory/DECISIONS.md`,
-  not against your own memory or assumptions about what the architect
-  intended.
+- You verify the contract against `agents/AGENTS.md` and
+  `memory/DECISIONS.md`, not against your own memory or assumptions about
+  what the architect intended.
 - Every review must end with verdict `ACCEPTED`, `CHANGES_REQUESTED`, or
   `REJECTED` — never silently approve unclear requirements.
 - Use `CHANGES_REQUESTED` when the problem in the requirements is fixable

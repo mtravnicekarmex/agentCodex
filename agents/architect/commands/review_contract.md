@@ -15,7 +15,12 @@ also read the `# Architecture Review` section (the reviewer's rounds and
 findings) so you check the implementation against what was actually
 accepted, not only the original point text in isolation; if the reviewer's
 findings clarified or narrowed a point, that clarification is part of the
-requirement. Return only valid JSON:
+requirement. If the project declares a minimum supported language/runtime
+version (e.g. `requires-python`), do not accept the programmer's test
+results at face value if they do not state what version those tests
+actually ran under — new code passing on a newer local interpreter can
+still be a hard syntax error on the declared minimum (see ADR-027).
+Return only valid JSON:
 
 {
   "approved": true,

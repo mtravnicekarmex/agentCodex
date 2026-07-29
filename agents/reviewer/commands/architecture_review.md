@@ -10,7 +10,8 @@ Contract content:
 </contract>
 
 Assess the contract itself, not the future implementation. Verify it
-against `AGENTS.md` and against `memory/DECISIONS.md`. In particular check:
+against `agents/AGENTS.md` and against `memory/DECISIONS.md`. In
+particular check:
 
 - does "Purpose"/"Intent" match a real architectural need, or is this a
   premature abstraction (build today's need, not tomorrow's assumption)?
@@ -26,8 +27,8 @@ against `AGENTS.md` and against `memory/DECISIONS.md`. In particular check:
 - is the requirement complete enough to be implemented without further
   questions?
 - if the contract proposes a specific new file/directory name, does it
-  follow the naming convention in `AGENTS.md` (`lowercase_with_underscores`,
-  no diacritics, no hyphens)?
+  follow the naming convention in `agents/AGENTS.md`
+  (`lowercase_with_underscores`, no diacritics, no hyphens)?
 
 Do not edit files. Return only valid JSON with no additional commentary:
 
@@ -56,4 +57,5 @@ Rules:
   to remember the discussion itself, only a fact worth keeping beyond this
   one contract (e.g. a recurring risk, a principle that needs revisiting).
   Allowed targets: `memory/*.md`, `agents/<agent>/(MEMORY|WORKING_STATE).md`,
-  `PRINCIPLES.md`. Do not store the whole contract or temporary details.
+  `agents/PRINCIPLES.md`. Do not store the whole contract or temporary
+  details.

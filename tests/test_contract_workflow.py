@@ -188,10 +188,10 @@ def test_rejects_unsafe_memory_path(tmp_path: Path) -> None:
 def test_allows_principles_memory_target(tmp_path: Path) -> None:
     store = create_store(tmp_path)
     path = store.append_memory(
-        MemoryUpdate(path="PRINCIPLES.md", text="Review flag: P6 — example."),
+        MemoryUpdate(path="agents/PRINCIPLES.md", text="Review flag: P6 — example."),
         source="architect",
     )
-    assert path == (tmp_path / "PRINCIPLES.md").resolve()
+    assert path == (tmp_path / "agents" / "PRINCIPLES.md").resolve()
     assert "Review flag: P6" in path.read_text(encoding="utf-8")
 
 

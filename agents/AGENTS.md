@@ -4,7 +4,7 @@
   This rule covers conversation only — written documentation (this file and
   all other `.md` files in the project) is in English.
 - Read related files and the public API before changing code (see
-  `PRINCIPLES.md` P7).
+  `agents/PRINCIPLES.md` P7).
 - Keep a unified interface for Codex and Claude wherever possible.
 - Keep provider-specific details hidden inside the implementation layer.
 - Never store passwords, tokens, or credentials in the repository.
@@ -12,30 +12,34 @@
   confirmation.
 - The project's long-term state lives in the `memory/` directory.
 - Agents' private profiles, memory, and commands live in `agents/<name>/`.
+- This file, along with `agents/PRINCIPLES.md`, `agents/AGENTS_SUGGESTIONS.md`,
+  and `agents/UPDATE_NOTES.md`, lives under `agents/` — the framework's
+  governing documentation sits next to the framework code it governs,
+  rather than at the repository root (see ADR-029).
 - The actual application code being built through this pipeline lives in
   `project/`, kept separate from this agentic framework/governance layer
   (`agents/agent.py`, `agents/agent_profile.py`, `agents/contract_workflow.py`,
-  `agents/git_ops.py`, `agents/pipeline.py`, `agents/<name>/`, `memory/`,
-  `contracts/`, `AGENTS.md`, `PRINCIPLES.md`, and the single root entry
-  point `chat_architect.py` — see ADR-021). This repository itself is the
-  reusable starting state ("point zero") copied for each new project — see
-  ADR-015.
-- The repository root has exactly one `.py` file, `chat_architect.py` —
-  the only way to run the pipeline. Everything else the framework needs is
-  a module under `agents/` (see ADR-021).
+  `agents/git_ops.py`, `agents/pipeline.py`, `agents/<name>/`,
+  `agents/AGENTS.md`, `agents/PRINCIPLES.md`, `memory/`, `contracts/`, and
+  the single root entry point `main.py` — see ADR-021, ADR-029). This
+  repository itself is the reusable starting state ("point zero") copied
+  for each new project — see ADR-015.
+- The repository root has exactly one `.py` file, `main.py` — the only
+  way to run the pipeline. Everything else the framework needs is a
+  module or document under `agents/` (see ADR-021, ADR-029).
 - Once `project/` holds real code (not just a placeholder), contract work
   is implemented in `project/` by default. Touching the framework layer
-  (`agents/*.py`, `chat_architect.py`) or a governance `.md` file
-  (`AGENTS.md`, `PRINCIPLES.md`, `ROLE.md`, `COMMANDS.md`) is in scope only
-  when the contract explicitly calls for it. Reading files outside
-  `project/` to understand context is always allowed — this restricts
-  writes, not reads. When in doubt, a change outside `project/` needs its
-  own contract point, not silent inclusion (see ADR-022).
+  (`agents/*.py`, `main.py`) or a governance `.md` file
+  (`agents/AGENTS.md`, `agents/PRINCIPLES.md`, `ROLE.md`, `COMMANDS.md`) is
+  in scope only when the contract explicitly calls for it. Reading files
+  outside `project/` to understand context is always allowed — this
+  restricts writes, not reads. When in doubt, a change outside `project/`
+  needs its own contract point, not silent inclusion (see ADR-022).
 
 ## Naming convention (see ADR-008)
 
 - Directories and source/code files: `lowercase_with_underscores`
-  (e.g. `chat_architect.py`, `agents/contract_workflow.py`, `agents/reviewer/`).
+  (e.g. `main.py`, `agents/contract_workflow.py`, `agents/reviewer/`).
 - Document `.md` files that carry a rule, role, state, or contract (not
   free-form text): `UPPERCASE_WITH_UNDERSCORES.md` (e.g. `ROLE.md`,
   `AGENTS.md`, `MEMORY.md`, `IMPLEMENTATION_CONTRACT_0001.md`). `README.md`
@@ -65,7 +69,7 @@
 - The history of both review gates is append-only — a new round is added,
   the old one is never overwritten or deleted.
 
-## Light path for small fixes (see `PRINCIPLES.md` P14, ADR-006)
+## Light path for small fixes (see `agents/PRINCIPLES.md` P14, ADR-006)
 
 Not every change needs a contract. Process weight should match decision
 weight — the full contract cycle protects structural, hard-to-reverse
@@ -94,5 +98,5 @@ review, the same way an uncommitted change does above.
 
 The project's operating principles (adopted from the Tr5 Platform and
 generalized, plus this project's own — see ADR-005 and ADR-011) live in
-`PRINCIPLES.md`, not here. That file is loaded in full into every agent's
-instructions.
+`agents/PRINCIPLES.md`, not here. That file is loaded in full into every
+agent's instructions.

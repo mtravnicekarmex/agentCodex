@@ -4,9 +4,9 @@
 
 Holds the actual application code for the project this clone of agentCodex
 was set up for — kept separate from the agentic framework/governance layer
-(`agents/` package, `memory/`, `contracts/`, `AGENTS.md`, `PRINCIPLES.md`,
-and the single root entry point `chat_architect.py`). Every implementation
-contract's actual code changes land here.
+(`agents/` package, including `agents/AGENTS.md` and `agents/PRINCIPLES.md`,
+`memory/`, `contracts/`, and the single root entry point `main.py`). Every
+implementation contract's actual code changes land here.
 
 ## Current capabilities (v0.1)
 
@@ -21,4 +21,4 @@ contract's actual code changes land here.
 
 - Grows as contracts are implemented. Internal structure (e.g. a backend/
   frontend split) is decided when a real project actually needs it, not in
-  advance (see `PRINCIPLES.md` P1, P15).
+  advance (see `agents/PRINCIPLES.md` P1, P15).

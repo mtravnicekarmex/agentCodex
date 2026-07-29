@@ -66,7 +66,7 @@ def test_instructions_include_role_and_memory(tmp_path: Path) -> None:
 
 def test_instructions_include_principles_when_file_exists(tmp_path: Path) -> None:
     root = create_profile(tmp_path)
-    (root / "PRINCIPLES.md").write_text(
+    (root / "agents" / "PRINCIPLES.md").write_text(
         "# agentCodex Principles\n\n### P1 - Example\nStatus: Active",
         encoding="utf-8",
     )

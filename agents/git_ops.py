@@ -11,7 +11,7 @@ def commit_and_push(project_root: Path, message: str) -> bool:
     commit (not an error — the pipeline may call this at a point where the
     working tree is already clean). Raises RuntimeError on any git failure
     (including a failed push), so the caller sees it and does not proceed
-    on top of an unsaved state (see PRINCIPLES.md P3).
+    on top of an unsaved state (see agents/PRINCIPLES.md P3).
     """
     _run_git(project_root, ["add", "-A"])
 

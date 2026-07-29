@@ -707,3 +707,309 @@ behavior, and light-path is explicitly for changes that do not (see
 refresh, since every future clone hits this exact code path on its very
 first run. The owner's already-cloned project needs the same one-function
 patch applied by hand, since that folder is not connected here.
+
+## ADR-024: Architect must not narrate contract actions it cannot perform
+
+First real end-to-end test of a `bod-nula` clone (project "SMS pro
+brány") surfaced a serious gap: the owner discussed a contract with the
+architect in plain conversation and said "posíláme dál" (let's send it
+on). The architect replied as if it had actually created
+`IMPLEMENTATION_CONTRACT_0001.md`, set it to `DRAFT`, and handed it off
+to `reviewer` for architecture review — complete with a restated JSON
+payload. None of that happened. No contract file was ever written, and
+`reviewer` was never invoked. The owner correctly noticed the pipeline
+looked "stuck" — there was nothing to be stuck, because nothing had
+started.
+
+Root cause: contract creation only happens through
+`agents/pipeline.py::create_contract()`, which the host application
+(`chat_architect.py`) runs only when the owner types `/new <topic>` (or
+`/revise <n> <topic>`) — a code path entirely separate from plain
+conversation (`architect.ask(raw)`, used for everything else typed at the
+prompt). The architect's own instructions (`agents/architect/ROLE.md`)
+correctly stated that "the contract is created by the host application
+from your structured JSON proposal," but never said this only happens via
+that specific command, nor forbade the model from claiming the action had
+already happened during ordinary chat. The architect also runs with
+`review` permissions (`Read`, `Grep`, `Glob` only — see its `config.json`)
+and has no tool of any kind to create a file or invoke Python itself, so
+it was structurally impossible for it to have actually done what it
+described; it only generated text that looked like the real output.
+
+Fixed: added an explicit role boundary to `agents/architect/ROLE.md` —
+the architect cannot create, submit, revise, or advance a contract during
+plain conversation; if the owner agrees a contract should be drafted, it
+must tell them to run `/new <topic>` (or `/revise <n> <topic>`), and must
+not describe a contract as created, submitted, or under review unless it
+was actually invoked through that command this turn.
+
+Not yet done, flagged for a follow-up decision: this only stops the
+model from *narrating* the gap away — it does not close the gap itself.
+The owner still has to notice the "stuck" pipeline, recognize what
+happened, and manually type `/new` with the same task description to
+actually start it for real (which is what unblocks the "SMS pro brány"
+project, per the owner's own next turn). Worth considering later: should
+plain conversation be able to trigger `create_contract()` directly (e.g.
+by having the architect emit a recognizable structured signal that
+`chat_architect.py` parses out of an otherwise free-text reply), so the
+owner does not need to know the `/new` command exists at all — this was
+the original point of grounding the opening greeting and having a single
+conversational entry point in the first place (ADR-021).
+
+Synced to `bod-nula` — every future clone's architect needs this
+boundary from its first session, since this exact scenario (owner agrees
+to something in conversation, expects it to actually happen) is the
+normal way the architect is meant to be used now.
+
+## ADR-025: Plain conversation can trigger the pipeline for real
+
+Follow-up to ADR-024, decided directly on the owner's live test project
+("SMS pro brány"). The owner confirmed the ADR-024 diagnosis (`/status`
+showed "No contracts yet", as predicted) but rejected stopping at "the
+architect tells you to type `/new`" — the explicit goal, in the owner's
+own words: "nebylo nutné znát jednotlivé příkazy, ale aby jejich použití
+vyplynulo z konverzace" (no need to know the individual commands — their
+use should follow naturally from the conversation). Asked which pipeline
+actions should be conversation-triggered; the owner pointed out that the
+post-implementation commit was already supposed to be automatic once
+owner and architect agree the result is good — tracing back to the
+original git-logic request behind ADR-019, where the `CONTRACT_XXXX -
+IMPLEMENTED` commit was meant to fire "pokud se shodneme na tom, že je
+dostatečná" (once we agree it's sufficient), not only via an explicit
+`/commit`. So the scope is the three moments that are naturally decided
+*in conversation*: drafting a contract, revising one, and agreeing an
+approved implementation is good to ship. `/work` and `/review` stay
+manual-override only — the pipeline already auto-chains through them
+(ADR-018), so there is no conversational decision point for them to hang
+off of.
+
+Mechanism: the architect ends a reply with a trailing fenced
+` ```pipeline-action ` block containing JSON — `{"action": "create",
+"task": "..."}`, `{"action": "revise", "number": N, "task": "..."}`, or
+`{"action": "commit", "number": N}` — only when the owner has just given
+clear, explicit agreement (see the new "Triggering the pipeline from
+conversation" section added to `agents/architect/ROLE.md`, spelling out
+exactly when and how). `agents/pipeline.py` gained two new functions:
+`extract_pipeline_action()` (regex-extracts and JSON-parses a trailing
+block, stripping it from what the owner sees; returns `(text, None)`
+unchanged if no valid block is present — never raises) and
+`dispatch_pipeline_action()` (routes a parsed action to the existing
+`create_contract` / `revise_contract` / `commit_approved_contract`, which
+already do the real work — this is purely a new way to invoke them,
+not new pipeline logic). `chat_architect.py`'s free-text branch now
+calls both after every `architect.ask(raw)`, before printing, and prints
+the real pipeline output afterward (created/reviewed/committed status
+lines) exactly as `/new` etc. already did — so the owner sees the actual
+system response, not just the architect's prose, closing the loop ADR-024
+started (never claim, always show what really happened).
+
+The slash commands themselves are unchanged and still work as manual
+overrides (e.g. if the owner wants to force a contract without
+back-and-forth, or the architect fails to emit the block). `/status`,
+`/inbox`, `/help`, `/exit`, `/work`, `/review` are untouched.
+
+Added 8 new tests to `tests/test_pipeline.py` covering
+`extract_pipeline_action` (no block, valid block, malformed JSON, missing
+`action` key) and `dispatch_pipeline_action` (create, commit, unknown
+action — must not raise). Full suite: 35/35 passing.
+
+Applied directly to the "SMS pro brány" project (owner's explicit
+request, to tune the pipeline there before porting the result back — an
+authorized exception to the ADR-022 project/-scoping default, not a
+violation of it): `agents/agent.py` there already had the ADR-023 fix
+(that project was cloned from `bod-nula` after that fix landed); synced
+`agents/architect/ROLE.md`, `agents/pipeline.py`, `chat_architect.py`,
+and `tests/test_pipeline.py` directly (framework files, no reason for
+per-project drift), and added local ADR-024/ADR-025 entries to that
+project's own `memory/DECISIONS.md` rather than overwriting it, since its
+memory is independent of this repository's from the point it was cloned
+(see ADR-020). Synced to `bod-nula` the same way once validated, so every
+future clone starts with this already working.
+
+## ADR-026: Resume a contract left mid-pipeline by an interrupted session
+
+Surfaced on "SMS pro brány" again: the owner created a contract, it was
+handed off to `programmer`, and the station restarted before the
+implementation finished. The next session showed the contract correctly
+stuck at `READY_FOR_PROGRAMMER`, but nothing moved it forward — the owner
+had to notice and ask. Worse, when asked to "hand it to the programmer
+again," the architect (correctly recognizing it has no tool to do that
+itself) told the owner they needed to "open a session for the
+`programmer` agent" — which is not how this application works.
+`chat_architect.py` already creates the `architect`, `reviewer`, and
+`programmer` agents together in one process (`ExitStack` in `main()`);
+there is no separate "programmer session" to open. The real fix was
+already sitting unused in the owner's own hands: the manual-override
+`/work` command, in the very session they were already in.
+
+The owner asked whether this calls for a new `orchestrator` role. Decided
+against it: resuming a stalled contract is a deterministic lookup — "is
+anything sitting at `READY_FOR_PROGRAMMER` or `READY_FOR_ARCHITECT_REVIEW`
+that isn't normally supposed to stay there?" — not a judgment call an LLM
+needs to make. `ContractStore.next_for_programmer()` /
+`next_for_implementation_review()` already answer exactly that. Adding an
+agent to decide something a few lines of plain code already decide
+correctly would just be new surface area for the same class of bug this
+ADR is about (an agent describing pipeline mechanics it doesn't actually
+control). Asked the owner how proactive the resume should be; picked
+"ask, then continue" over "resume silently" or "report only, leave it to
+a command" — consistent with `/commit` staying a deliberate owner
+checkpoint rather than a silent side effect.
+
+Added to `agents/pipeline.py`: `find_stuck_contracts()` (contracts sitting
+in `READY_FOR_PROGRAMMER` or `READY_FOR_ARCHITECT_REVIEW` — states that
+are normally transient within a single `continue_pipeline()` call, so
+surviving into a new session means the previous run didn't finish, not
+that anyone is waiting on the owner) and `resume_stuck_contract()`
+(picks up with `implement_next()`/`review_next()` from wherever the
+contract actually is, same as `continue_pipeline()` would have).
+`opening_briefing()` now calls `find_stuck_contracts()` and, if anything
+is found, explicitly instructs the architect to flag it and ask the owner
+before doing anything. `dispatch_pipeline_action()` gained a fourth
+action, `"resume"` (alongside `create`/`revise`/`commit` from ADR-025),
+routed to `resume_stuck_contract()`. `agents/architect/ROLE.md`'s
+"Triggering the pipeline from conversation" section documents this fourth
+action and states plainly that the architect must not claim a separate
+session or agent is needed — the programmer is already live in the same
+conversation.
+
+Added 7 new tests to `tests/test_pipeline.py`
+(`find_stuck_contracts` filtering correctly vs. genuine owner checkpoints,
+`opening_briefing`'s stuck-note appearing/not appearing,
+`resume_stuck_contract` from both stuck statuses and as a no-op on a
+non-stuck one, and `dispatch_pipeline_action` routing `"resume"`). Full
+suite: 42/42 passing.
+
+Synced to `bod-nula` and to "SMS pro brány" the same way as ADR-025 (the
+owner needs this working in the live session where the problem actually
+occurred). Restarting "SMS pro brány"'s `chat_architect.py` is required
+for the fix to take effect, same caveat as ADR-025.
+
+## ADR-027: Reviews must check code against the declared minimum runtime version, not just what's installed locally
+
+Generalizes a finding from reviewing "SMS pro brány"'s actual application
+code (project-specific, not itself brought into this repository —
+`project/` here stays empty; only the process lesson generalizes).
+`project/send_sms.py` there used a backslash inside an f-string
+expression, valid only from Python 3.12 onward (PEP 701), while
+`project/pyproject.toml` declared `requires-python = ">=3.11"`. On 3.10 or
+3.11 the module is a hard `SyntaxError` at import — not a runtime bug,
+the code cannot even be loaded. Both the architecture review and two
+rounds of implementation review across two separate contracts missed it,
+because the programmer's own local interpreter was newer than the
+declared floor, its tests genuinely passed there, and nobody checked
+"passed under what version, and does that match what we declared to
+support."
+
+This is a process gap independent of any one project's code, so it
+belongs in the role instructions rather than in any project's `project/`
+tree. Added to `agents/programmer/ROLE.md`'s "Way of working": when a
+project declares a minimum supported language/runtime version, do not
+rely on whatever is locally available — check new syntax/stdlib usage is
+actually valid at that declared floor, and report which
+interpreter/runtime version tests actually ran under, so it's checkable.
+Added a matching line to `agents/architect/commands/review_contract.md`:
+during implementation review, do not accept passing tests at face value
+if the report doesn't state what version they ran under.
+
+Deliberately kept lightweight (a sentence in each of two existing files,
+no new mandatory step, no tooling) rather than, say, requiring every
+contract to run tests under every declared-supported version — that
+would be process weight disproportionate to how often this actually
+bites (P14). Docs-only change; full suite still 42/42 (no test file
+touched). Synced to `bod-nula` and "SMS pro brány" the same way as
+ADR-023 through ADR-026.
+
+## ADR-028: Pipeline steps print their actual content, not just a status line
+
+Another live finding on "SMS pro brány": after `continue_pipeline()` (or
+`/work`, `/review`, `resume_stuck_contract()`) ran the programmer and then
+the architect's implementation review automatically, the console showed
+only `IMPLEMENTATION_CONTRACT_0003 handed off to the architect for
+review.` and `IMPLEMENTATION_CONTRACT_0003: APPROVED; handed off to
+owner.` — terse status lines. The actual review content (what was
+checked, why it passed) only appeared once the owner explicitly asked
+"jak vypadá výsledek?" The owner asked for this to happen automatically.
+
+Root cause: `run_architecture_review()`, `implement_next()`, and
+`review_next()` in `agents/pipeline.py` all parse a JSON response
+containing real prose (`findings` from the reviewer, `summary` from the
+programmer and from the architect's implementation review) purely to
+extract fields for `ContractStore` — the prose itself was discarded after
+that, never shown to the owner. The one-line status print was the only
+output, regardless of how much substance the actual review contained.
+This is the same class of gap as ADR-024/ADR-025 from the other
+direction: there it was the architect describing an action nobody asked
+it to narrate; here it's the host application doing real work and
+narrating none of it.
+
+Fixed: all three functions now print the real content (`findings` /
+`summary`) immediately after their existing status line — no new
+mechanism, no new agent call, the text was already being fetched and
+parsed, just not shown. This applies uniformly whether the step was
+reached via `/work`, `/review`, the ADR-025 conversational actions, or
+ADR-026's `resume_stuck_contract()` — none of them are special-cased.
+
+Docs/code-only change to three `print()` calls; no test asserted on
+console output before this, so nothing to update; full suite still
+42/42. Synced to `bod-nula` and "SMS pro brány" the same way as ADR-023
+through ADR-027.
+
+## ADR-029: Governance `.md` files moved into `agents/`; entry point renamed to `main.py`
+
+Owner's direction: the repository root should hold only `README.md`,
+`requirements.txt`, `.gitignore`, `.env`, `.env.example`, and the single
+entry point — renamed from `chat_architect.py` to `main.py`. Everything
+else agent-related moves into `agents/`, continuing the ADR-021
+consolidation (framework code already lives there; the governing
+documentation now sits next to it instead of at the root).
+
+Asked the owner where exactly the four root `.md` files should land,
+since `AGENTS.md` and `PRINCIPLES.md` are functionally wired into code
+(`agent_profile.py` reads `PRINCIPLES.md` by a fixed path; it is also one
+of the three patterns in `ALLOWED_MEMORY_TARGETS`) while
+`AGENTS_SUGGESTIONS.md` and `UPDATE_NOTES.md` are reference/historical
+notes — a split was one reasonable option. Owner chose putting all four
+under `agents/` uniformly.
+
+Moved: `AGENTS.md` → `agents/AGENTS.md`, `PRINCIPLES.md` →
+`agents/PRINCIPLES.md`, `AGENTS_SUGGESTIONS.md` →
+`agents/AGENTS_SUGGESTIONS.md`, `UPDATE_NOTES.md` → `agents/UPDATE_NOTES.md`.
+`chat_architect.py` → `main.py` (content otherwise unchanged — it never
+referenced its own filename).
+
+Code changes required by the move (the two places `PRINCIPLES.md` was
+functionally wired to a root-relative path, not just mentioned in prose):
+- `agents/agent_profile.py`: `principles_file` now resolves to
+  `project_root / "agents" / "PRINCIPLES.md"`.
+- `agents/contract_workflow.py`: `ALLOWED_MEMORY_TARGETS`'s pattern is now
+  `^agents/PRINCIPLES\.md$` (was `^PRINCIPLES\.md$`); the matching error
+  message updated to match.
+- `agent_profile.py`'s always-injected "Technical profile" text (ADR-022)
+  and every prose reference to `AGENTS.md`/`PRINCIPLES.md` across
+  `agents/architect/ROLE.md`, `agents/programmer/ROLE.md`,
+  `agents/reviewer/ROLE.md`/`COMMANDS.md`/`commands/architecture_review.md`,
+  `README.md`, `project/README.md`, and `memory/PROJECT_STATE.md` updated
+  to the new `agents/` paths. `memory/DECISIONS.md`'s own historical ADR
+  entries are left untouched — an append-only log describes what was true
+  when it was written, not what is true now.
+- Two tests updated to match: `tests/test_agent_profile.py` writes the
+  fixture's `PRINCIPLES.md` to `agents/PRINCIPLES.md`;
+  `tests/test_contract_workflow.py`'s allowed-target test now uses
+  `agents/PRINCIPLES.md`.
+
+The five retired root files (`AGENTS.md`, `PRINCIPLES.md`,
+`AGENTS_SUGGESTIONS.md`, `UPDATE_NOTES.md`, `chat_architect.py`) were
+overwritten with short redirect notes, same as every previous retirement
+in this repository (ADR-021) — the connected-folder sandbox cannot delete
+files, so the owner deletes them manually. Root now holds exactly
+`README.md`, `requirements.txt`, `.gitignore`, `.env`, `.env.example`, and
+`main.py`, once those five are removed.
+
+Verified: `py_compile` on all touched `.py` files, full pytest run (42/42
+passing). Synced to `bod-nula` and "SMS pro brány" the same way as
+ADR-023 through ADR-028 — both need the same five-file move, the same two
+code edits, and the same `main.py` rename, plus their own five old-root
+files retired the same way. "SMS pro brány" needs `main.py` (not
+`chat_architect.py`) run from now on, and its `.venv`/IDE run
+configuration updated accordingly by the owner.

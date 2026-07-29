@@ -32,7 +32,7 @@ META_RE = re.compile(
 ALLOWED_MEMORY_TARGETS = (
     re.compile(r"^memory/[A-Za-z0-9_.-]+\.md$"),
     re.compile(r"^agents/[A-Za-z0-9_-]+/(MEMORY|WORKING_STATE)\.md$"),
-    re.compile(r"^PRINCIPLES\.md$"),
+    re.compile(r"^agents/PRINCIPLES\.md$"),
 )
 
 
@@ -484,7 +484,7 @@ class ContractStore:
             raise ValueError(
                 f"Disallowed memory target {update.path!r}. "
                 "Only memory/*.md, agents/*/(MEMORY|WORKING_STATE).md, and "
-                "PRINCIPLES.md are allowed."
+                "agents/PRINCIPLES.md are allowed."
             )
         text = update.text.strip()
         if not text:

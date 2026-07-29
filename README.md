@@ -37,15 +37,15 @@ with create_agent("architect", config=config) as architect:
 
 ## Talking to the architect
 
-The only entry point at the repository root is `chat_architect.py` — a
-single window onto the architect. There is no multi-agent console; the
-reviewer and programmer are created internally to run the pipeline, but
-you never chat with them directly (see ADR-021).
+The only entry point at the repository root is `main.py` — a single
+window onto the architect. There is no multi-agent console; the reviewer
+and programmer are created internally to run the pipeline, but you never
+chat with them directly (see ADR-021, ADR-029).
 
 Run:
 
 ```powershell
-python chat_architect.py
+python main.py
 ```
 
 On start, the architect is briefed on the real contract queue and its own
@@ -138,7 +138,7 @@ During review the architect (implementation review) or reviewer
 memory/*.md
 agents/<agent>/MEMORY.md
 agents/<agent>/WORKING_STATE.md
-PRINCIPLES.md
+agents/PRINCIPLES.md
 ```
 
 The host code rejects any other target.
