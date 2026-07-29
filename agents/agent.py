@@ -215,18 +215,28 @@ def _run_claude_cli(*args: str, capture_output: bool = False) -> subprocess.Comp
 
 def login_claude() -> None:
     status = _run_claude_cli("auth", "status", "--json", capture_output=True)
-    if status.returncode != 0:
+    # The `claude` CLI exits non-zero for "not logged in" (it still prints
+    # valid JSON, e.g. {"loggedIn": false, ...}), not only for a genuine
+    # failure to run the check. So the exit code alone cannot distinguish
+    # "not logged in" from "could not check" — only a body that parses as
+    # the expected JSON with a `loggedIn` field is a reliable signal either
+    # way; anything else (empty output, garbage, a crash) is a real failure.
+    info = None
+    if status.stdout:
+        try:
+            parsed = json.loads(status.stdout)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict) and "loggedIn" in parsed:
+            info = parsed
+
+    if info is not None and info.get("loggedIn"):
+        return
+    if info is None:
         detail = (status.stderr or status.stdout or "").strip()
         if detail:
             raise RuntimeError(f"Could not verify Claude login status: {detail}")
         raise RuntimeError("Could not verify Claude login status.")
-
-    try:
-        info = json.loads(status.stdout or "{}")
-    except json.JSONDecodeError:
-        info = {}
-    if info.get("loggedIn"):
-        return
 
     print("Open your browser and sign in to your Anthropic account...")
     result = _run_claude_cli("auth", "login", "--claudeai")

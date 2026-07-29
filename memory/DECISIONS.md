@@ -660,3 +660,50 @@ Verified: `py_compile` on the touched `.py` files, and a full pytest run
 (24/24 passing; had to pass `--confcutdir=tests` to route around the
 still-unreadable `.pytest-tmp` directory at the repo root — see the open
 git thread below, unrelated to this change).
+
+## ADR-023: `login_claude()` failed to trigger login on a fresh clone
+
+The owner's first real run of a `bod-nula` clone (`chat_architect.py` on a
+brand-new project, before ever running `claude auth login`) crashed instead
+of prompting for login:
+
+```
+RuntimeError: Could not verify Claude login status: {
+  "loggedIn": false,
+  "authMethod": "none",
+  "apiProvider": "firstParty"
+}
+```
+
+Root cause: `agents/agent.py::login_claude()` treated any non-zero exit
+code from `claude auth status --json` as a failure to check status at all,
+raising immediately without looking at stdout. In practice the CLI exits
+non-zero for the ordinary "not logged in" case too, while still printing
+valid JSON with `loggedIn: false` — confirmed by running the command
+directly (`claude auth status --json` → exit 1, valid JSON body). So the
+one case the function exists to handle (a brand-new machine, nobody has
+run `claude auth login` yet) was exactly the case it crashed on instead of
+walking the owner through login.
+
+Fixed: `login_claude()` no longer branches on the exit code. It parses
+`stdout` and only trusts the result if it is a JSON object containing a
+`loggedIn` key (regardless of exit code) — `loggedIn: true` returns
+immediately, `loggedIn: false` (or missing/absent) falls through to the
+existing `claude auth login --claudeai` flow. Only a body that is empty or
+does not parse as that shape is treated as a real failure to verify status
+(covers an actual CLI crash, a changed output format, etc.).
+
+Added `tests/test_agent.py` (new file, none existed for this module
+before) covering all four paths via a monkeypatched `_run_claude_cli`:
+already logged in; not logged in with non-zero exit (the bug's exact
+scenario) triggering and completing the login flow; unparseable/empty
+status output raising with the original detail; and the login flow itself
+failing. Full suite: 28/28 passing.
+
+This is a framework-layer bug (`agents/agent.py`), not project code, so it
+was fixed directly here rather than treated as light-path — changes
+behavior, and light-path is explicitly for changes that do not (see
+`AGENTS.md`). Synced to `bod-nula` the same way as the ADR-021/ADR-022
+refresh, since every future clone hits this exact code path on its very
+first run. The owner's already-cloned project needs the same one-function
+patch applied by hand, since that folder is not connected here.
